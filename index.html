@@ -120,6 +120,7 @@ h2{margin:0;font-size:1.7rem;font-weight:700;text-wrap:balance}
     linear-gradient(var(--line),var(--line)) center/1px 100% no-repeat;
   border:1px solid color-mix(in srgb,var(--cinnabar) 45%,transparent)}
 .qprompt{margin:0;font-size:1.2rem;font-weight:600}
+.qprompt.warn{color:var(--gold)}
 .qprompt small{display:block;color:var(--muted);font-weight:400;font-size:.85rem;margin-top:2px}
 #qform{display:flex;gap:8px;width:100%}
 #qin{flex:1;min-width:0;background:var(--ink);border:1px solid var(--line);border-radius:6px;color:var(--paper);font:inherit;font-size:1.3rem;padding:.55rem .8rem;user-select:text}
@@ -212,7 +213,7 @@ tr.me td{background:color-mix(in srgb,var(--gold) 12%,transparent)}
     <span class="chip focus" id="focusChip" hidden>Focus · damage ×1.5</span>
     <span class="chip streak" id="streakChip" hidden></span>
   </div>
-  <div id="bossbar" hidden>年兽 Nian<div><i id="bossfill"></i></div></div>
+  <div id="bossbar" hidden><span id="bossName">年兽 Nian</span><div><i id="bossfill"></i></div></div>
   <div id="coll"></div>
 </div>
 
@@ -246,7 +247,7 @@ tr.me td{background:color-mix(in srgb,var(--gold) 12%,transparent)}
 <!-- Draft -->
 <div id="draft" class="ov" hidden>
   <div class="panel">
-    <div class="head"><div><p class="eyebrow" id="draftEye">Level up</p><h2 id="draftTitle">Choose a character</h2></div><p class="hint">Press 1, 2 or 3</p></div>
+    <div class="head"><div><p class="eyebrow" id="draftEye">Level up</p><h2 id="draftTitle">Choose a character</h2></div><div class="row"><p class="hint" id="draftHint">Press 1, 2 or 3</p><button class="btn ghost" id="rerollBtn" type="button" hidden>Reroll</button></div></div>
     <div class="cards" id="cards"></div>
   </div>
 </div>
@@ -350,7 +351,7 @@ tr.me td{background:color-mix(in srgb,var(--gold) 12%,transparent)}
     <div class="head"><div><p class="eyebrow">Field guide</p><h2>How to play</h2></div><button class="btn ghost back" type="button">Back</button></div>
     <div class="howto">
       <p><b>Move</b> with WASD or the arrow keys. On a phone, drag anywhere. Your weapons aim and fire on their own. <b>Esc</b> pauses.</p>
-      <p><b>Hearts.</b> You lose one when an enemy or bullet touches you, and one for every wrong test answer.</p>
+      <p><b>Hearts.</b> You lose one when an enemy or bullet touches you, and one for every wrong test answer. The only way to get one back is five right answers in a row.</p>
       <p><b>Classes</b> set which words can show up. 学生 Student uses HSK 1, 书生 Scholar uses HSK 1–2, and 大师 Sage uses HSK 1–3. Each class also has its own starting weapons and a perk.</p>
       <p><b>Level up</b> by collecting jade drops. Each level you draft one of three characters, and each one comes with a random buff.</p>
       <p><b>Pop tests</b> arrive every 20 to 30 seconds and ask you about a character you drafted this run. A right answer raises that character's mastery (up to 3), which makes its buff stronger. It also gives a burst of XP and 6 seconds of extra damage. Five right in a row heals a heart. A wrong answer costs a heart and a mastery point.</p>
@@ -361,7 +362,7 @@ tr.me td{background:color-mix(in srgb,var(--gold) 12%,transparent)}
     <div class="opt"><label>Require tones<small>Off: "nihao" is fine. On: type ni3hao3 or nǐhǎo</small></label>
       <div class="seg" id="optTones"><button type="button" data-v="0">Off</button><button type="button" data-v="1">On</button></div></div>
     <div class="opt"><label>Answer time<small>Seconds per test question</small></label>
-      <div class="seg" id="optTime"><button type="button" data-v="12">12</button><button type="button" data-v="20">20</button><button type="button" data-v="30">30</button></div></div>
+      <div class="seg" id="optTime"><button type="button" data-v="8">8</button><button type="button" data-v="12">12</button><button type="button" data-v="18">18</button></div></div>
     <div class="opt"><label>Your save<small>Move your runs and word stats to another browser or device</small></label>
       <div class="row"><button class="btn ghost" id="exportBtn" type="button">Export</button><label class="btn ghost" for="importFile" tabindex="0" id="importLbl">Import</label><input type="file" id="importFile" accept=".json,application/json" hidden></div>
       <p class="muted" id="saveMsg" style="margin:0;width:100%" hidden></p></div>
@@ -1059,8 +1060,9 @@ const KEY = 'hanzi-survivor-v1';
 const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { } };
 const Settings = (() => {
-  let s = { mode: 'mix', tones: false, qtime: 20, speak: true, cls: 'student' };
+  let s = { mode: 'mix', tones: false, qtime: 12, speak: true, cls: 'student' };
   try { Object.assign(s, JSON.parse(localStorage.getItem(KEY + '-settings') || '{}')); } catch (e) { }
+  if (![8, 12, 18].includes(+s.qtime)) s.qtime = 12;
   return s;
 })();
 function saveSettings() { try { localStorage.setItem(KEY + '-settings', JSON.stringify(Settings)); } catch (e) { } }
@@ -1145,6 +1147,8 @@ const WEAPONS = [
   { id: 'nova', name: 'Firecracker', zh: '炮', desc: 'Bursts outward from you' },
   { id: 'thunder', name: 'Thunder Seal', zh: '雷', desc: 'Calls lightning on enemies' },
   { id: 'seal', name: 'Stone Seal', zh: '印', desc: 'Stamps mines that explode' },
+  { id: 'lantern', name: 'Lantern', zh: '灯', desc: 'Burns and slows enemies close to you' },
+  { id: 'sword', name: 'Flying Sword', zh: '剑', desc: 'A homing blade that bounces between enemies' },
 ];
 const WBYID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
 const CLASSES = [
@@ -1169,6 +1173,16 @@ const BUFFS = [
   { id: 'hp', kind: 'flat', v: 1, label: 'max heart', min: 1 },
   { id: 'proj', kind: 'flat', v: 1, label: 'projectile', min: 1 },
   { id: 'pierce', kind: 'flat', v: 1, label: 'pierce' },
+  { id: 'focusT', kind: 'sec', v: 1.5, label: 'Focus after a right answer', sub: 'Focus is the damage boost right answers give you' },
+  { id: 'quizxp', kind: 'pct', v: .20, label: 'XP from right answers' },
+  { id: 'qtime', kind: 'sec', v: 1.5, label: 'answer time on tests' },
+  { id: 'streakdmg', kind: 'pct', v: .03, label: 'damage per answer in your streak', sub: 'Counts up to a 10-answer streak' },
+  { id: 'elitedmg', kind: 'pct', v: .20, label: 'damage to elites and bosses' },
+  { id: 'slow', kind: 'pct', v: .10, label: 'chance for hits to chill', sub: 'Chilled enemies move 40% slower for 1.5s' },
+  { id: 'execute', kind: 'pct', v: .04, label: 'execute', sub: 'Regular enemies below this much health die instantly (max 30%)' },
+  { id: 'luck', kind: 'pct', v: .20, label: 'chance of rare and epic cards' },
+  { id: 'reroll', kind: 'flat', v: 1, label: 'draft reroll', sub: 'Rerolls refresh at every draft · one extra at mastery 3' },
+  { id: 'ward', kind: 'flat', v: 1, label: 'Ink Ward level', sub: 'Every 6s, wipes enemy bullets around you · one extra level at mastery 3' },
   ...WEAPONS.filter(w => w.id !== 'brush').map(w => ({ id: 'w_' + w.id, kind: 'weapon', weapon: w.id, label: w.name })),
   { id: 'w_brush', kind: 'weapon', weapon: 'brush', label: 'Brush Bolt' },
 ];
@@ -1184,12 +1198,12 @@ function buffText(b, r, m) {
     case 'weapon': return `${b.label} +${v} level${v > 1 ? 's' : ''}`;
     case 'flat': return `+${v} ${b.label}${v > 1 && b.id !== 'pierce' ? 's' : ''}`;
     case 'sec': return `+${v.toFixed(2)}s ${b.label}`;
-    case 'regen': return `+${v.toFixed(1)} ${b.label}`;
     default: return `+${Math.round(v * 100)}% ${b.label}`;
   }
 }
 function buffSub(b) {
   if (b.kind === 'weapon') return WBYID[b.weapon].desc + ' · each mastery point adds a level';
+  if (b.sub) return b.sub + (b.kind === 'flat' ? '' : ' · grows with mastery');
   if (b.kind === 'flat') return 'One extra at mastery 3';
   return 'Grows 50% per mastery point';
 }
@@ -1198,11 +1212,18 @@ function buffSub(b) {
 const ET = {
   mote:    { hp: 14, spd: 74, r: 12, xp: 1, col: '#8f7dff' },
   runner:  { hp: 9, spd: 128, r: 9, xp: 1, col: '#59c9e6' },
-  caster:  { hp: 26, spd: 72, r: 13, xp: 2, col: '#f0a050', ranged: true },
+  caster:  { hp: 26, spd: 72, r: 13, xp: 2, col: '#f0a050', ranged: true, range: [190, 270] },
+  splitter:{ hp: 34, spd: 60, r: 16, xp: 2, col: '#7fd36b', split: true },
+  mini:    { hp: 7, spd: 112, r: 8, xp: 1, col: '#a6e88f' },
+  dasher:  { hp: 30, spd: 58, r: 13, xp: 2, col: '#ff9f43', dash: true },
+  bomber:  { hp: 20, spd: 96, r: 12, xp: 2, col: '#ff6b6b', bomb: true },
+  sniper:  { hp: 26, spd: 70, r: 12, xp: 3, col: '#c9a7ff', ranged: true, range: [360, 460] },
   brute:   { hp: 72, spd: 46, r: 22, xp: 4, col: '#d16aa0' },
   spinner: { hp: 46, spd: 32, r: 16, xp: 3, col: '#ff6f8a' },
-  elite:   { hp: 320, spd: 60, r: 28, xp: 20, col: '#f2c94c', glyph: '妖' },
-  nian:    { hp: 4200, spd: 52, r: 48, xp: 80, col: '#ff5a3c', glyph: '年', boss: true },
+  elite:   { hp: 320, spd: 60, r: 28, xp: 20, col: '#f2c94c', glyph: '妖', elite: true },
+  general: { hp: 360, spd: 52, r: 30, xp: 22, col: '#7fe0d0', glyph: '将', elite: true },
+  nian:    { hp: 4200, spd: 52, r: 48, xp: 80, col: '#ff5a3c', glyph: '年', boss: true, title: '年兽 Nian' },
+  long:    { hp: 6000, spd: 64, r: 44, xp: 120, col: '#4fb3ff', glyph: '龙', boss: true, title: '龙 Dragon' },
 };
 
 /* ================= canvas ================= */
@@ -1238,8 +1259,8 @@ function newGame(clsId) {
     lvl: 1, xp: 0, need: xpNeed(1), kills: 0,
     en: [], pb: [], eb: [], orbs: [], pt: [], fx: [], tx: [], seals: [],
     coll: [], mastery: {}, wt: {}, stats: null, wl: {},
-    spawnT: 1.5, eliteT: 120, bossAt: 300, quizT: 0, pendingDraft: 0, rareDraft: false,
-    streak: 0, bestStreak: 0, focus: 0, regenAcc: 0,
+    spawnT: 1.5, eliteT: 120, bossAt: 300, ringT: 150, wardT: 6, eliteN: 0, bossN: 0, quizT: 0, pendingDraft: 0, rareDraft: false,
+    streak: 0, bestStreak: 0, focus: 0,
     learned: new Set(), correct: 0, total: 0, results: {},
     shake: 0, hurtFlash: 0, eid: 0, lastQuiz: null, quiz: null, cards: null, hudSig: '',
   };
@@ -1250,7 +1271,8 @@ function newGame(clsId) {
 
 function recompute() {
   const C = G.cls;
-  const s = { dmg: 1, rate: 1, speed: 1, area: 1, pickup: 1, xp: 1 + (C.xp || 0), crit: .05, iframe: 1.0, regen: 0, hp: 5 + (C.hp || 0), proj: 0, pierce: 0 };
+  const s = { dmg: 1, rate: 1, speed: 1, area: 1, pickup: 1, xp: 1 + (C.xp || 0), crit: .05, iframe: 1.0, hp: 5 + (C.hp || 0), proj: 0, pierce: 0,
+    focusT: 0, quizxp: 0, qtime: 0, streakdmg: 0, elitedmg: 0, slow: 0, execute: 0, luck: 0, reroll: 0, ward: 0 };
   const wl = Object.assign({ brush: 1 }, C.kit);
   for (const c of G.coll) {
     const b = BBY[c.buff], v = buffValue(b, c.r, G.mastery[c.w.h] || 0);
@@ -1281,6 +1303,7 @@ addEventListener('keydown', e => {
   }
   if ((k === 'escape' || k === 'p') && (G.state === 'play' || G.state === 'paused')) { togglePause(); return; }
   if (G.state === 'draft' && ['1', '2', '3'].includes(k)) pickCard(+k - 1);
+  if (G.state === 'draft' && k === 'r') reroll();
   if (G.state === 'quiz' && G.quiz && G.quiz.done && (k === 'enter' || k === ' ') && performance.now() > G.quiz.ready) { e.preventDefault(); closeQuiz(); }
 });
 addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
@@ -1310,13 +1333,15 @@ function togglePause() {
 }
 
 /* ================= draft ================= */
-function rollR(min) { const x = Math.random(); return Math.max(x < 0.1 ? 2 : x < 0.4 ? 1 : 0, min); }
+function rollR(min) { const L = 1 + G.stats.luck, x = Math.random(); return Math.max(x < 0.1 * L ? 2 : x < 0.4 * L ? 1 : 0, min); }
 function pickBuff(r, used) {
   const nW = Object.keys(G.wl).length;
   const pool = BUFFS.filter(b => (b.min || 0) <= r && !used.has(b.id) && !(b.kind === 'weapon' && (G.wl[b.weapon] || 0) >= 8));
   return pickW(pool, b => b.kind === 'weapon' ? (G.wl[b.weapon] ? 0.9 : nW < 5 ? 1.2 : 0.5) : 1);
 }
 function openDraft(o) {
+  if (!o.reroll) G.rerolls = G.stats.reroll;
+  G.draftOpts = o;
   const minR = o.scroll ? 1 : 0;
   const inColl = new Set(G.coll.map(c => c.w.h));
   let pool = G.pool.filter(w => !inColl.has(w.h)); if (pool.length < 3) pool = G.pool.slice();
@@ -1346,9 +1371,18 @@ function openDraft(o) {
   }).join('');
   $('#cards').querySelectorAll('.card').forEach(el => el.onclick = () => pickCard(+el.dataset.i));
   $('#cards').querySelectorAll('.hear').forEach(el => el.onclick = () => speak(el.dataset.h));
+  const rb = $('#rerollBtn');
+  rb.hidden = !(G.rerolls > 0); rb.textContent = `Reroll (${G.rerolls} left)`;
+  $('#draftHint').textContent = G.rerolls > 0 ? 'Press 1, 2 or 3 · R to reroll' : 'Press 1, 2 or 3';
   G.state = 'draft'; showOnly('draft');
   G.draftReady = performance.now() + 350;
 }
+function reroll() {
+  if (G.state !== 'draft' || !(G.rerolls > 0) || performance.now() < G.draftReady) return;
+  G.rerolls--;
+  openDraft(Object.assign({}, G.draftOpts, { reroll: true }));
+}
+$('#rerollBtn').onclick = () => reroll();
 function pickCard(i) {
   if (!G.cards || !G.cards[i] || performance.now() < G.draftReady) return;
   const c = G.cards[i]; G.cards = null;
@@ -1376,13 +1410,15 @@ function startQuiz(kind) {
     const s = wstat(w.h); const pa = s.pn ? s.pc / s.pn : 0, ma = s.mn ? s.mc / s.mn : 0;
     type = Math.random() < 0.6 && pa !== ma ? (pa < ma ? 'pinyin' : 'meaning') : (Math.random() < .5 ? 'pinyin' : 'meaning');
   }
-  G.quiz = { w, type, kind, left: Settings.qtime, done: false, ready: 0 };
+  const qmax = Settings.qtime + G.stats.qtime;
+  G.quiz = { w, type, kind, left: qmax, max: qmax, done: false, ready: 0 };
   G.state = 'quiz';
   $('#qkind').textContent = kind === 'scroll' ? 'Scroll test · pass for a rare character' : 'Pop test';
   $('#qhz').textContent = w.h;
+  $('#qprompt').className = 'qprompt';
   $('#qprompt').innerHTML = type === 'pinyin'
-    ? `Type the pinyin<small>${Settings.tones ? 'Tones required: ni3hao3 or nǐhǎo' : 'Tones optional · spaces optional'}</small>`
-    : `Type the English meaning<small>Any common meaning counts</small>`;
+    ? `Type the <b class="mid">pinyin</b><small>${Settings.tones ? 'Tones required: ni3hao3 or nǐhǎo' : 'Tones optional · spaces optional'}</small>`
+    : `Type the <b class="mid">English meaning</b><small>Any common meaning counts</small>`;
   $('#qask').hidden = false; $('#qres').hidden = true;
   $('#qin').value = ''; $('#qbar').style.width = '100%';
   showOnly('quiz');
@@ -1394,8 +1430,22 @@ $('#qcont').onclick = () => { if (G && G.quiz && performance.now() > G.quiz.read
 
 function answerQuiz(inp) {
   const q = G.quiz; if (!q || q.done) return;
-  q.done = true;
   const w = q.w;
+  // Typing the other kind of answer (or Chinese characters) gets one free retry
+  if (inp != null && !q.retried) {
+    const cjk = /[\u3400-\u9fff]/.test(inp);
+    const other = !cjk && (q.type === 'pinyin' ? checkEn(inp, w) : checkPy(inp, w));
+    if (cjk || other) {
+      q.retried = true;
+      const want = q.type === 'pinyin' ? 'pinyin' : 'English meaning';
+      $('#qprompt').className = 'qprompt warn';
+      $('#qprompt').innerHTML = cjk ? `Switch to an English keyboard and type the <b>${want}</b><small>One more try</small>`
+        : `That's the ${q.type === 'pinyin' ? 'meaning' : 'pinyin'}. This one asks for the <b>${want}</b><small>One more try</small>`;
+      $('#qin').value = ''; $('#qin').focus();
+      return;
+    }
+  }
+  q.done = true;
   const ok = inp != null && (q.type === 'pinyin' ? checkPy(inp, w) : checkEn(inp, w));
   const s = wstat(w.h);
   if (q.type === 'pinyin') { s.pn++; if (ok) s.pc++; } else { s.mn++; if (ok) s.mc++; }
@@ -1406,8 +1456,9 @@ function answerQuiz(inp) {
     G.correct++; r.c++; G.learned.add(w.h); G.streak++; G.bestStreak = Math.max(G.bestStreak, G.streak);
     const m = G.mastery[w.h] || 0;
     if (m < 3) { G.mastery[w.h] = m + 1; notes.push(`Mastery ${m + 1}/3, so its buff grows`); } else notes.push('Fully mastered');
-    G.focus = G.cls.focus || 6; G.xp += Math.ceil(G.need * 0.3 * (1 + (G.cls.quizXp || 0)));
-    notes.push(`+XP · ${G.focus}s Focus`);
+    G.focus = (G.cls.focus || 6) + G.stats.focusT;
+    G.xp += Math.ceil(G.need * 0.3 * (1 + (G.cls.quizXp || 0) + G.stats.quizxp));
+    notes.push(`+XP · ${Math.round(G.focus * 10) / 10}s Focus`);
     if (G.streak % 5 === 0 && G.hearts < G.stats.hp) { G.hearts++; notes.push('Streak of 5 heals a heart'); }
     if (q.kind === 'scroll') { G.rareDraft = true; notes.push('Rare draft unlocked'); }
   } else {
@@ -1446,39 +1497,49 @@ function spawnEnemy(type, opts = {}) {
   const dist = Math.hypot(W, H) / 2 / SCALE + 60;
   const sc = 1 + G.t / 240 + (G.t / 600) ** 2;
   const hp = T.hp * (T.boss ? 1 + G.t / 400 : sc);
-  G.en.push({
-    id: ++G.eid, t: type, x: G.p.x + Math.cos(ang) * dist, y: G.p.y + Math.sin(ang) * dist,
+  const e = {
+    id: ++G.eid, t: type, x: opts.x ?? G.p.x + Math.cos(ang) * (opts.dist ?? dist), y: opts.y ?? G.p.y + Math.sin(ang) * (opts.dist ?? dist),
     hp, maxHp: hp, r: T.r, kx: 0, ky: 0, flash: 0, orbCd: 0, fc: rand(1, 2.5), side: Math.random() < .5 ? 1 : -1,
-    sm: rand(0.9, 1.1), spin: rand(0, TAU), phase: 0, pt: 0, dead: false,
-  });
+    sm: rand(0.9, 1.1), spin: rand(0, TAU), phase: 0, pt: 0, dead: false, ds: 0, dc: rand(1.5, 3), aim: 0, fuse: 0, chill: 0,
+  };
+  G.en.push(e); return e;
 }
-function nearestEnemy(x, y, maxD) {
+function nearestEnemy(x, y, maxD, skip) {
   let best = null, bd = maxD * maxD;
-  for (const e of G.en) { if (e.dead) continue; const d = (e.x - x) ** 2 + (e.y - y) ** 2; if (d < bd) { bd = d; best = e; } }
+  for (const e of G.en) { if (e.dead || (skip && skip.includes(e.id))) continue; const d = (e.x - x) ** 2 + (e.y - y) ** 2; if (d < bd) { bd = d; best = e; } }
   return best;
 }
 function hit(e, d, kx = 0, ky = 0) {
   if (e.dead) return;
-  const crit = Math.random() < G.stats.crit;
+  const T = ET[e.t], s = G.stats;
+  const crit = Math.random() < s.crit;
   if (crit) d *= 2;
   if (G.focus > 0) d *= 1.5;
+  d *= 1 + s.streakdmg * Math.min(G.streak, 10);
+  if (T.elite || T.boss) d *= 1 + s.elitedmg;
   e.hp -= d; e.flash = 0.08;
-  const kb = ET[e.t].boss ? 0.1 : e.t === 'elite' ? 0.3 : 1;
+  if (s.slow > 0 && Math.random() < s.slow) e.chill = 1.5;
+  const kb = T.boss ? 0.1 : T.elite ? 0.3 : 1;
   e.kx += kx * kb; e.ky += ky * kb;
   if (crit) floatText(e.x, e.y - e.r, Math.round(d), '#f2b84b', .5);
-  if (e.hp <= 0) kill(e);
+  if (e.hp <= 0 || (!T.boss && !T.elite && s.execute > 0 && e.hp < e.maxHp * Math.min(0.3, s.execute))) kill(e);
 }
 function kill(e) {
   e.dead = true; G.kills++;
   const T = ET[e.t];
   dropOrb(e.x, e.y, 'xp', T.xp);
-  if (e.t === 'elite' || T.boss) dropOrb(e.x + 14, e.y, 'scroll', 0);
-  if (T.boss) { dropOrb(e.x - 14, e.y, 'bun', 0); for (let i = 0; i < 10; i++) dropOrb(e.x + rand(-50, 50), e.y + rand(-50, 50), 'xp', 6); }
-  else if (Math.random() < 0.008) dropOrb(e.x, e.y + 10, 'bun', 0);
+  if (T.elite || T.boss) dropOrb(e.x + 14, e.y, 'scroll', 0);
+  if (T.boss) for (let i = 0; i < 10; i++) dropOrb(e.x + rand(-50, 50), e.y + rand(-50, 50), 'xp', 6);
+  if (T.split && G.en.length < 300) for (let i = 0; i < 3; i++) spawnEnemy('mini', { x: e.x + rand(-12, 12), y: e.y + rand(-12, 12) });
   for (let i = 0; i < (T.boss ? 40 : 7); i++) {
     const a = rand(0, TAU), s = rand(40, T.boss ? 320 : 160);
     G.pt.push({ x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(.3, .7), max: .7, r: rand(2, T.boss ? 7 : 4), col: T.col });
   }
+}
+function explode(e) {
+  e.dead = true;
+  ring(e, 12, 150, rand(0, TAU));
+  G.fx.push({ type: 'ring', x: e.x, y: e.y, R: 60, life: .3, max: .3, col: '255,107,107' });
 }
 function dropOrb(x, y, kind, v) {
   if (kind === 'xp' && G.orbs.length > 350) {
@@ -1519,6 +1580,14 @@ function updWeapons(dt) {
       }
       continue;
     }
+    if (id === 'lantern') {
+      st.cd -= dt; st.R = (62 + 9 * L) * s.area;
+      if (st.cd <= 0) {
+        st.cd = 0.5; const dmg = (3 + 2.2 * L) * s.dmg;
+        for (const e of G.en) if (!e.dead && (e.x - P.x) ** 2 + (e.y - P.y) ** 2 < (st.R + e.r) ** 2) { hit(e, dmg); e.chill = Math.max(e.chill, 0.6); }
+      }
+      continue;
+    }
     st.cd -= dt;
     if (st.cd > 0) continue;
     if (id === 'brush') {
@@ -1553,6 +1622,11 @@ function updWeapons(dt) {
         G.fx.push({ type: 'bolt', x, y, life: .22, max: .22, R });
       }
       st.cd = (2.3 - 0.12 * L) / s.rate;
+    } else if (id === 'sword') {
+      const tgt = nearestEnemy(P.x, P.y, 600); if (!tgt) continue;
+      const n = 1 + Math.floor(L / 3) + s.proj;
+      for (let i = 0; i < n; i++) G.pb.push({ x: P.x, y: P.y, vx: 0, vy: 0, r: 7 * Math.sqrt(s.area), dmg: (12 + 5 * L) * s.dmg, pierce: 2 + L + s.pierce, life: 3, hits: [], kind: 'sword', tgt: i ? null : tgt, spd: 600 });
+      st.cd = (2.0 - 0.1 * L) / s.rate;
     } else if (id === 'seal') {
       if (G.seals.length < 3 + L) G.seals.push({ x: P.x, y: P.y, life: 10, arm: 0.5, R: (70 + 10 * L) * s.area, dmg: (35 + 15 * L) * s.dmg });
       st.cd = (2.8 - 0.15 * L) / s.rate;
@@ -1577,11 +1651,6 @@ function update(dt) {
   if (mag) { P.x += mx * 195 * s.speed * mag * dt; P.y += my * 195 * s.speed * mag * dt; P.fx = mx; P.fy = my; }
 
   G.inv -= dt; G.focus -= dt; G.shake = Math.max(0, G.shake - 40 * dt); G.hurtFlash -= dt;
-  // regen
-  if (s.regen > 0) {
-    if (G.hearts < s.hp) { G.regenAcc += s.regen / 60 * dt; if (G.regenAcc >= 1) { G.regenAcc -= 1; G.hearts++; floatText(P.x, P.y - 24, '+1 ♥', '#ff5a4e'); } }
-    else G.regenAcc = 0;
-  }
 
   // spawning
   const boss = G.en.find(e => ET[e.t].boss && !e.dead);
@@ -1591,20 +1660,51 @@ function update(dt) {
     G.spawnT = Math.max(0.35, 1.3 - t * 0.0022) * (boss ? 2 : 1);
     const n = 1 + Math.floor(t / 150);
     for (let i = 0; i < n; i++) {
-      const type = pickW(['mote', 'runner', 'caster', 'brute', 'spinner'], k => ({
-        mote: 10, runner: t > 50 ? 6 : 0, caster: t > 90 ? 4 : 0, brute: t > 140 ? 3 : 0, spinner: t > 200 ? 2.5 : 0
+      const type = pickW(['mote', 'runner', 'caster', 'brute', 'spinner', 'splitter', 'dasher', 'bomber', 'sniper'], k => ({
+        mote: 10, runner: t > 50 ? 6 : 0, caster: t > 90 ? 4 : 0, brute: t > 140 ? 3 : 0, spinner: t > 200 ? 2.5 : 0,
+        splitter: t > 120 ? 3 : 0, dasher: t > 170 ? 3 : 0, bomber: t > 230 ? 2.5 : 0, sniper: t > 270 ? 2 : 0
       })[k]);
       spawnEnemy(type);
     }
   }
   G.eliteT -= dt;
-  if (G.eliteT <= 0) { G.eliteT = 90; spawnEnemy('elite'); floatText(P.x, P.y - 60, 'An elite approaches', '#f2c94c', 2); }
-  if (G.t >= G.bossAt) { G.bossAt += 300; spawnEnemy('nian'); floatText(P.x, P.y - 60, '年兽 Nian awakens', '#ff5a3c', 2.5); }
+  if (G.eliteT <= 0) {
+    G.eliteT = 90; G.eliteN++;
+    const gen = G.eliteN % 2 === 0;
+    spawnEnemy(gen ? 'general' : 'elite');
+    floatText(P.x, P.y - 60, gen ? '将 A ghost general approaches' : '妖 An elite approaches', '#f2c94c', 2);
+  }
+  if (G.t >= G.bossAt) {
+    G.bossAt += 300; G.bossN++;
+    const bt = G.bossN % 2 ? 'nian' : 'long';
+    spawnEnemy(bt); floatText(P.x, P.y - 60, ET[bt].title + ' awakens', ET[bt].col, 2.5);
+  }
+  G.ringT -= dt;
+  if (G.ringT <= 0) {
+    G.ringT = 150;
+    const n = 16 + Math.floor(G.t / 25), rt = G.t > 300 ? 'runner' : 'mote';
+    for (let i = 0; i < n; i++) spawnEnemy(rt, { ang: i * TAU / n, dist: 430 });
+    floatText(P.x, P.y - 60, 'Surrounded! Break through the ring', '#ff5a4e', 2.2);
+  }
 
   updWeapons(dt);
+  if (s.ward > 0) {
+    G.wardT -= dt;
+    if (G.wardT <= 0) {
+      G.wardT = 6; const R = 70 + 40 * s.ward;
+      G.eb = G.eb.filter(b => (b.x - P.x) ** 2 + (b.y - P.y) ** 2 > R * R);
+      G.fx.push({ type: 'ring', x: P.x, y: P.y, R, life: .4, max: .4, col: '79,209,165' });
+    }
+  }
 
   // player bullets
   for (const b of G.pb) {
+    if (b.kind === 'sword') {
+      if (!b.tgt || b.tgt.dead || b.hits.includes(b.tgt.id)) b.tgt = nearestEnemy(b.x, b.y, 520, b.hits);
+      if (!b.tgt) { b.life = 0; continue; }
+      const dx = b.tgt.x - b.x, dy = b.tgt.y - b.y, d = Math.hypot(dx, dy) || 1;
+      b.vx = dx / d * b.spd; b.vy = dy / d * b.spd;
+    }
     b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
     if (b.life <= 0) continue;
     for (const e of G.en) {
@@ -1637,17 +1737,48 @@ function update(dt) {
     if (e.dead) continue;
     const T = ET[e.t];
     let dx = P.x - e.x, dy = P.y - e.y; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
-    let mvx = dx, mvy = dy;
-    if (T.ranged) { if (d < 190) { mvx = -dx; mvy = -dy; } else if (d < 270) { mvx = -dy * e.side; mvy = dx * e.side; } }
-    const sp = T.spd * e.sm;
+    let mvx = dx, mvy = dy, sp = T.spd * e.sm;
+    if (T.ranged) { const [lo, hi] = T.range; if (d < lo) { mvx = -dx; mvy = -dy; } else if (d < hi) { mvx = -dy * e.side; mvy = dx * e.side; } }
+    // charge: 0 approach → 1 wind-up (telegraphed) → 2 dash
+    if (T.dash || e.t === 'long') {
+      const big = e.t === 'long';
+      e.dc -= dt;
+      if (e.ds === 0 && e.dc <= 0 && d < (big ? 520 : 340) && (!big || e.phase === 1)) { e.ds = 1; e.dt = big ? 0.6 : 0.7; e.ldx = dx; e.ldy = dy; }
+      if (e.ds === 1) { sp = 0; e.dt -= dt; if (e.dt <= 0) { e.ds = 2; e.dt = big ? 0.55 : 0.45; } }
+      else if (e.ds === 2) {
+        mvx = e.ldx; mvy = e.ldy; sp = big ? 620 : 520; e.dt -= dt;
+        if (e.dt <= 0) { e.ds = 0; e.dc = big ? 0.4 : 2.4; if (big) ring(e, 18, 140, rand(0, TAU)); }
+      }
+    }
+    if (T.bomb) {
+      if (e.fuse > 0) { sp *= 0.3; e.fuse -= dt; if (e.fuse <= 0) { explode(e); continue; } }
+      else if (d < 85) e.fuse = 0.9;
+    }
+    if (e.chill > 0) { sp *= 0.6; e.chill -= dt; }
     e.x += (mvx * sp + e.kx) * dt; e.y += (mvy * sp + e.ky) * dt;
     e.kx *= decay; e.ky *= decay; e.orbCd -= dt; e.flash -= dt;
     e.fc -= dt;
-    if (e.fc <= 0) {
+    if (e.t === 'sniper') {
+      if (e.aim > 0) {
+        e.aim -= dt;
+        if (e.aim > 0.25) e.ang = Math.atan2(P.y - e.y, P.x - e.x);
+        if (e.aim <= 0) { fireBullet(e.x, e.y, e.ang, 430, 5); e.fc = 3.2; }
+      } else if (e.fc <= 0 && d < 720) { e.aim = 1.0; e.ang = Math.atan2(P.y - e.y, P.x - e.x); }
+    } else if (e.fc <= 0) {
       const aim = Math.atan2(P.y - e.y, P.x - e.x);
       if (e.t === 'caster') { if (d < 620) for (let i = -1; i <= 1; i++) fireBullet(e.x, e.y, aim + i * 0.24, 170); e.fc = 2.6; }
       else if (e.t === 'spinner') { ring(e, 10, 130, e.spin); e.spin += 0.3; e.fc = 3.2; }
       else if (e.t === 'elite') { ring(e, 14, 150, e.spin); e.spin += 0.2; e.fc = 3.4; }
+      else if (e.t === 'general') {
+        if (G.en.length < 300) for (let i = 0; i < 3; i++) spawnEnemy('mote', { x: e.x + rand(-40, 40), y: e.y + rand(-40, 40) });
+        for (let i = -2; i <= 2; i++) fireBullet(e.x, e.y, aim + i * 0.2, 160);
+        e.fc = 3.6;
+      }
+      else if (e.t === 'long') {
+        if (e.phase === 0) { const a = aim + Math.sin(e.spin) * 0.9; fireBullet(e.x, e.y, a - 0.12, 180); fireBullet(e.x, e.y, a + 0.12, 180); e.spin += 0.32; e.fc = 0.12; }
+        else if (e.phase === 1) e.fc = 0.5;
+        else { for (let i = 0; i < 4; i++) fireBullet(e.x, e.y, e.spin + i * TAU / 4, 150); e.spin += 0.19; e.fc = 0.1; }
+      }
       else if (e.t === 'nian') {
         if (e.phase === 0) { fireBullet(e.x, e.y, e.spin, 150); fireBullet(e.x, e.y, e.spin + Math.PI, 150); e.spin += 0.23; e.fc = 0.09; }
         else if (e.phase === 1) { for (let i = -2; i <= 2; i++) fireBullet(e.x, e.y, aim + i * 0.18, 210); e.fc = 0.75; }
@@ -1700,7 +1831,6 @@ function update(dt) {
     if (d < 16) {
       o.dead = true;
       if (o.kind === 'xp') G.xp += o.v * s.xp;
-      else if (o.kind === 'bun') { if (G.hearts < s.hp) G.hearts++; floatText(P.x, P.y - 24, '包子 +1 ♥', '#efe6d2'); }
       else if (o.kind === 'scroll') G.pendingScroll = (G.pendingScroll || 0) + 1;
     }
   }
@@ -1786,9 +1916,6 @@ function draw(dt) {
     if (o.kind === 'xp') {
       const r = 4 + Math.min(6, Math.sqrt(o.v) * 1.6);
       ctx.fillStyle = '#4fd1a5'; ctx.beginPath(); ctx.moveTo(o.x, o.y - r); ctx.lineTo(o.x + r * .7, o.y); ctx.lineTo(o.x, o.y + r); ctx.lineTo(o.x - r * .7, o.y); ctx.fill();
-    } else if (o.kind === 'bun') {
-      ctx.fillStyle = '#f4ecdc'; ctx.beginPath(); ctx.arc(o.x, o.y, 10, 0, TAU); ctx.fill();
-      ctx.strokeStyle = '#c9b89a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(o.x, o.y - 2, 4, 0.2, Math.PI - 0.2); ctx.stroke();
     } else {
       const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 160);
       ctx.fillStyle = `rgba(242,184,75,${0.25 * pulse})`; ctx.beginPath(); ctx.arc(o.x, o.y, 22, 0, TAU); ctx.fill();
@@ -1796,10 +1923,32 @@ function draw(dt) {
       ctx.fillStyle = '#3a2a08'; ctx.font = '700 13px "Noto Serif SC", serif'; ctx.fillText('卷', o.x, o.y + 1);
     }
   }
+  // lantern aura
+  const lw = G.wt.lantern;
+  if (lw && G.wl.lantern && lw.R) {
+    const g = ctx.createRadialGradient(P.x, P.y, lw.R * 0.2, P.x, P.y, lw.R);
+    g.addColorStop(0, 'rgba(242,184,75,.16)'); g.addColorStop(1, 'rgba(242,184,75,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(P.x, P.y, lw.R, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(242,184,75,.35)'; ctx.setLineDash([6, 8]); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(P.x, P.y, lw.R, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+  }
   // enemies
   for (const e of G.en) {
-    if (!vis(e.x, e.y, e.r + 10)) continue;
     const T = ET[e.t];
+    if (e.t === 'sniper' && e.aim > 0) {
+      ctx.strokeStyle = `rgba(255,79,123,${0.25 + 0.6 * (1 - e.aim)})`; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + Math.cos(e.ang) * 900, e.y + Math.sin(e.ang) * 900); ctx.stroke();
+    }
+    if (!vis(e.x, e.y, e.r + 10)) continue;
+    if (e.ds === 1) {
+      const len = e.t === 'long' ? 360 : 240;
+      ctx.strokeStyle = `rgba(255,159,67,${0.25 + 0.35 * Math.sin(performance.now() / 50) ** 2})`; ctx.lineWidth = e.r * 1.4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + e.ldx * len, e.y + e.ldy * len); ctx.stroke(); ctx.lineCap = 'butt';
+    }
+    if (e.fuse > 0) {
+      ctx.fillStyle = `rgba(255,107,107,${0.25 + 0.25 * Math.sin(performance.now() / 40)})`;
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 6 + 16 * (1 - e.fuse / 0.9), 0, TAU); ctx.fill();
+    }
     if (T.glyph) {
       ctx.fillStyle = T.boss ? 'rgba(255,90,60,.18)' : 'rgba(242,201,76,.16)';
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 10 + Math.sin(performance.now() / 200) * 3, 0, TAU); ctx.fill();
@@ -1807,6 +1956,8 @@ function draw(dt) {
     ctx.fillStyle = e.flash > 0 ? '#ffffff' : T.col;
     ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, TAU); ctx.fill();
     ctx.fillStyle = 'rgba(18,15,34,.55)'; ctx.beginPath(); ctx.arc(e.x, e.y + e.r * .25, e.r * .72, 0, TAU); ctx.fill();
+    if (T.split) { ctx.strokeStyle = 'rgba(18,15,34,.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(e.x, e.y - e.r); ctx.lineTo(e.x, e.y + e.r); ctx.stroke(); }
+    if (e.chill > 0) { ctx.strokeStyle = 'rgba(160,210,255,.85)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 2.5, 0, TAU); ctx.stroke(); }
     if (T.glyph) {
       ctx.fillStyle = e.flash > 0 ? '#120f22' : '#fff4dc'; ctx.font = `900 ${Math.round(e.r * 1.05)}px "Noto Serif SC", serif`;
       ctx.fillText(T.glyph, e.x, e.y + e.r * .12);
@@ -1827,6 +1978,13 @@ function draw(dt) {
   }
   // player bullets
   for (const b of G.pb) {
+    if (b.kind === 'sword') {
+      ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(Math.atan2(b.vy, b.vx));
+      ctx.fillStyle = 'rgba(79,209,165,.28)'; ctx.fillRect(-b.r * 3, -b.r * .9, b.r * 4.6, b.r * 1.8);
+      ctx.fillStyle = '#e9fff6'; ctx.beginPath(); ctx.moveTo(b.r * 2.2, 0); ctx.lineTo(-b.r * 1.6, -b.r * .45); ctx.lineTo(-b.r * 1.6, b.r * .45); ctx.fill();
+      ctx.fillStyle = '#4fd1a5'; ctx.fillRect(-b.r * 2.2, -b.r * .8, b.r * .6, b.r * 1.6);
+      ctx.restore(); continue;
+    }
     ctx.fillStyle = b.kind === 'fan' ? 'rgba(239,230,210,.9)' : 'rgba(242,184,75,.3)';
     if (b.kind === 'fan') {
       const a = Math.atan2(b.vy, b.vx);
@@ -1915,6 +2073,7 @@ function updHud() {
   $('#focusChip').hidden = !(G.focus > 0);
   const boss = G.en.find(e => ET[e.t].boss);
   $('#bossbar').hidden = !boss;
+  if (boss) $('#bossName').textContent = ET[boss.t].title;
   if (boss) $('#bossfill').style.width = (100 * clamp(boss.hp / boss.maxHp, 0, 1)) + '%';
 }
 
@@ -1934,6 +2093,11 @@ function renderPause() {
     ['Damage', `${Math.round(s.dmg * 100)}%`], ['Attack speed', `${Math.round(s.rate * 100)}%`], ['Move speed', `${Math.round(s.speed * 100)}%`],
     ['Area', `${Math.round(s.area * 100)}%`], ['Crit chance', `${Math.round(s.crit * 100)}%`], ['Projectiles', `+${s.proj}`], ['Pierce', `+${s.pierce}`],
     ['Pickup range', `${Math.round(s.pickup * 100)}%`], ['XP gain', `${Math.round(s.xp * 100)}%`], ['Invulnerability', `${s.iframe.toFixed(2)}s`],
+    ...[['Focus after right answers', s.focusT, v => `+${v.toFixed(1)}s`], ['Answer time', s.qtime, v => `+${v.toFixed(1)}s`],
+      ['XP from right answers', s.quizxp], ['Damage per streak answer', s.streakdmg], ['Damage to elites and bosses', s.elitedmg],
+      ['Chill chance', s.slow], ['Execute below', Math.min(0.3, s.execute)], ['Rare card chance', s.luck],
+      ['Rerolls per draft', s.reroll, v => v], ['Ink Ward level', s.ward, v => v]]
+      .filter(r => r[1] > 0).map(([a, v, f]) => [a, f ? f(v) : `+${Math.round(v * 100)}%`]),
   ];
   $('#pauseBuild').innerHTML = rows.map(([a, b]) => `<div class="li" style="grid-template-columns:1fr auto"><span class="meta">${esc(a)}</span><span class="res">${esc(b)}</span></div>`).join('');
 }
@@ -2134,7 +2298,7 @@ function frame(ts) {
     if (G.state === 'play') update(dt);
     else if (G.state === 'quiz' && G.quiz && !G.quiz.done) {
       G.quiz.left -= dt;
-      $('#qbar').style.width = (100 * clamp(G.quiz.left / Settings.qtime, 0, 1)) + '%';
+      $('#qbar').style.width = (100 * clamp(G.quiz.left / G.quiz.max, 0, 1)) + '%';
       if (G.quiz.left <= 0) answerQuiz(null);
     }
     if (G.state !== 'over') updHud();
