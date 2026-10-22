@@ -1,0 +1,2149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="A roguelike bullet-hell where you draft HSK Chinese characters as power-ups and must pass pop tests on them to survive.">
+<meta name="theme-color" content="#120f22">
+<title>Hanzi Survivor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@500;700;900&display=swap">
+<style>
+/* Layout: full-bleed canvas arena on a 田字格 practice-sheet floor; DOM overlays float above it like paper slips. Single dark night-market look by choice. */
+:root{
+  --ink:#120f22;        /* night ground */
+  --panel:#1d1934;      /* paper slips at night */
+  --panel2:#262044;
+  --paper:#efe6d2;      /* rice paper text */
+  --muted:#9d96ba;
+  --line:rgba(239,230,210,.13);
+  --gold:#f2b84b;       /* lantern */
+  --jade:#4fd1a5;       /* correct / player */
+  --cinnabar:#ff5a4e;   /* seal red / danger */
+  --t1:#ff7070; --t2:#7ddc8f; --t3:#6fa8ff; --t4:#c792ff; --t5:#9d96ba; /* tone colours */
+  --f-hz:"Noto Serif SC","Songti SC","SimSun",serif;
+  --f-brush:"Ma Shan Zheng","Noto Serif SC","KaiTi",serif;
+  --f-ui:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;overflow:hidden;margin:0}
+body{background:var(--ink);color:var(--paper);font-family:var(--f-ui);font-size:16px;-webkit-tap-highlight-color:transparent;user-select:none}
+canvas{position:fixed;inset:0;display:block;touch-action:none}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.hz{font-family:var(--f-hz);font-weight:700}
+.eyebrow{margin:0;text-transform:uppercase;letter-spacing:.14em;font-size:.78rem;font-weight:600;color:var(--gold)}
+h2{margin:0;font-size:1.7rem;font-weight:700;text-wrap:balance}
+.btn{background:var(--gold);color:#1a1300;border:0;border-radius:6px;padding:.65rem 1.3rem;font-weight:700;font-size:1.05rem;letter-spacing:.02em}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;color:var(--paper);border:1px solid var(--line)}
+.btn.ghost:hover{border-color:var(--muted)}
+.btn.danger{background:transparent;color:var(--cinnabar);border:1px solid color-mix(in srgb,var(--cinnabar) 50%,transparent)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.t1{color:var(--t1)}.t2{color:var(--t2)}.t3{color:var(--t3)}.t4{color:var(--t4)}.t5{color:var(--t5)}
+
+/* ---------- overlays ---------- */
+.ov{position:fixed;inset:0;display:grid;place-items:center;overflow:auto;padding:16px;background:rgba(10,8,20,.74);backdrop-filter:blur(3px);z-index:20}
+.ov.clear{background:transparent;backdrop-filter:none}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:24px;width:min(100%,880px);display:grid;gap:16px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.panel.narrow{width:min(100%,520px)}
+
+/* menu */
+#menu .panel{background:transparent;border:0;box-shadow:none;justify-items:center;text-align:center;gap:22px;width:min(100%,560px)}
+.logo{font-family:var(--f-brush);font-size:clamp(2.6rem,14vw,6rem);line-height:1;white-space:nowrap;color:var(--paper);text-shadow:0 0 40px rgba(242,184,75,.35)}
+.logo span{color:var(--cinnabar)}
+.sub{letter-spacing:.42em;text-transform:uppercase;font-weight:600;color:var(--gold);font-size:1rem;margin:-10px 0 0}
+.tag{color:var(--muted);max-width:42ch;margin:0;line-height:1.45}
+.menu-btns{display:grid;gap:10px;width:min(100%,300px)}
+.menu-btns .btn{width:100%}
+.lifetime{color:var(--muted);font-size:.92rem;font-variant-numeric:tabular-nums}
+.sync{font-size:.8rem;color:var(--muted)}
+
+/* HUD */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+.xpbar{position:absolute;left:0;right:0;top:0;height:6px;background:rgba(255,255,255,.06)}
+.xpbar i{display:block;height:100%;width:0;background:var(--jade);box-shadow:0 0 10px var(--jade)}
+.hud-top{position:absolute;top:14px;left:16px;right:16px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+#hearts{font-size:1.5rem;letter-spacing:2px;color:var(--cinnabar);text-shadow:0 0 8px rgba(255,90,78,.5);line-height:1}
+#hearts .empty{color:rgba(239,230,210,.18);text-shadow:none}
+.hud-mid{text-align:center;font-variant-numeric:tabular-nums}
+#clock{font-size:1.6rem;font-weight:700;display:block;line-height:1}
+#lvl{font-size:.85rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.hud-right{display:flex;gap:10px;align-items:center;font-variant-numeric:tabular-nums}
+#pauseBtn{pointer-events:auto;background:rgba(29,25,52,.8);border:1px solid var(--line);border-radius:6px;padding:.3rem .7rem;font-size:.9rem}
+.status{position:absolute;top:58px;left:16px;display:grid;gap:6px;justify-items:start}
+.chip{background:rgba(29,25,52,.82);border:1px solid var(--line);border-radius:999px;padding:.2rem .7rem;font-size:.85rem;font-weight:600;font-variant-numeric:tabular-nums}
+.chip.test b{color:var(--gold)}
+.chip.test.soon{border-color:var(--gold);animation:pulse .6s infinite alternate}
+.chip.focus{color:var(--jade);border-color:color-mix(in srgb,var(--jade) 50%,transparent)}
+.chip.streak{color:var(--gold)}
+@keyframes pulse{to{box-shadow:0 0 14px rgba(242,184,75,.6)}}
+#bossbar{position:absolute;top:64px;left:50%;transform:translateX(-50%);width:min(70vw,460px);text-align:center;font-size:.85rem;letter-spacing:.12em;text-transform:uppercase;color:var(--cinnabar);font-weight:700}
+#bossbar div{height:8px;margin-top:4px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden}
+#bossbar i{display:block;height:100%;background:var(--cinnabar)}
+#coll{position:absolute;left:16px;right:16px;bottom:14px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.cchip{background:rgba(29,25,52,.82);border:1px solid var(--line);border-radius:6px;padding:3px 7px 2px;display:grid;justify-items:center;min-width:34px}
+.cchip .hz{font-size:1.25rem;line-height:1.15}
+.pips{display:flex;gap:3px;margin-top:2px}
+.pips i{width:5px;height:5px;border-radius:50%;background:rgba(239,230,210,.2)}
+.pips i.on{background:var(--jade)}
+
+/* draft */
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.card-wrap{display:grid;gap:6px}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:16px 14px;display:grid;gap:8px;justify-items:center;text-align:center;transition:transform .12s,border-color .12s;position:relative}
+.card:hover,.card:focus-visible{transform:translateY(-3px);border-color:var(--gold)}
+.card .key{position:absolute;top:8px;left:10px;font-size:.75rem;color:var(--muted);font-weight:700}
+.card .rar{position:absolute;top:8px;right:10px;font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;font-weight:700}
+.card .big{font-family:var(--f-hz);font-weight:900;font-size:clamp(3rem,9vw,4.6rem);line-height:1.1;margin-top:10px}
+.card .py{font-size:1.35rem;font-weight:600}
+.card .en{color:var(--paper);font-size:1rem;line-height:1.3;min-height:2.6em}
+.card .buff{width:100%;border-top:1px dashed var(--line);padding-top:10px;display:grid;gap:2px}
+.card .buff b{font-size:1.05rem}
+.card .buff small{color:var(--muted);font-size:.8rem}
+.badge{font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.badge.new{color:var(--jade);border-color:color-mix(in srgb,var(--jade) 45%,transparent)}
+.r0{color:var(--muted)}.r1{color:var(--jade)}.r2{color:var(--gold)}
+.card.r2b{border-color:color-mix(in srgb,var(--gold) 45%,transparent)}
+.card.r1b{border-color:color-mix(in srgb,var(--jade) 35%,transparent)}
+.hear{justify-self:center;background:none;border:0;color:var(--muted);font-size:.85rem;text-decoration:underline;text-underline-offset:3px}
+.hint{margin:0;color:var(--muted);font-size:.9rem;text-align:center}
+
+/* quiz */
+.quizp{width:min(100%,480px);justify-items:center;text-align:center;border-color:color-mix(in srgb,var(--gold) 40%,transparent)}
+.qhz{font-family:var(--f-hz);font-weight:900;font-size:clamp(5rem,26vw,8.5rem);line-height:1.05;position:relative;padding:6px 18px;
+  background:
+    linear-gradient(var(--line),var(--line)) center/100% 1px no-repeat,
+    linear-gradient(var(--line),var(--line)) center/1px 100% no-repeat;
+  border:1px solid color-mix(in srgb,var(--cinnabar) 45%,transparent)}
+.qprompt{margin:0;font-size:1.2rem;font-weight:600}
+.qprompt small{display:block;color:var(--muted);font-weight:400;font-size:.85rem;margin-top:2px}
+#qform{display:flex;gap:8px;width:100%}
+#qin{flex:1;min-width:0;background:var(--ink);border:1px solid var(--line);border-radius:6px;color:var(--paper);font:inherit;font-size:1.3rem;padding:.55rem .8rem;user-select:text}
+#qin:focus{border-color:var(--gold);outline:none}
+.qtimer{width:100%;height:5px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden}
+.qtimer i{display:block;height:100%;background:var(--gold);width:100%}
+#qres{display:grid;gap:8px;justify-items:center;width:100%}
+.verdict{font-size:1.6rem;font-weight:700;margin:0}
+.verdict.ok{color:var(--jade)}.verdict.bad{color:var(--cinnabar)}
+.answer{font-size:1.3rem;margin:0}
+.answer .py{font-weight:600}
+.yours{color:var(--muted);margin:0;font-size:.95rem}
+.note{margin:0;color:var(--gold);font-size:.95rem}
+
+/* pause / over / tables */
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px}
+.stat{background:var(--panel2);border-radius:8px;padding:10px 12px}
+.stat b{display:block;font-size:1.5rem;font-variant-numeric:tabular-nums}
+.stat span{font-size:.78rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.stat.hl b{color:var(--gold)}
+.list{display:grid;gap:6px;max-height:46vh;overflow:auto;padding-right:4px}
+.li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;background:var(--panel2);border-radius:6px;padding:6px 10px}
+.li .hz{font-size:1.5rem}
+.li .meta{min-width:0;font-size:.92rem;line-height:1.25}
+.li .meta small{color:var(--muted);display:block}
+.li .res{font-weight:700;font-variant-numeric:tabular-nums;font-size:.9rem}
+.ok{color:var(--jade)}.bad{color:var(--cinnabar)}.mid{color:var(--gold)}
+.tablewrap{overflow:auto;max-height:58vh;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:.95rem}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+td.wrap{white-space:normal;min-width:160px}
+th{position:sticky;top:0;background:var(--panel2);font-size:.76rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600;z-index:1}
+td .hz{font-size:1.45rem}
+.acc{display:inline-block;min-width:3.4em;text-align:center;border-radius:4px;padding:1px 6px;font-weight:700;font-size:.85rem}
+.acc.none{color:var(--muted)}
+.acc.lo{background:color-mix(in srgb,var(--cinnabar) 22%,transparent);color:var(--cinnabar)}
+.acc.md{background:color-mix(in srgb,var(--gold) 20%,transparent);color:var(--gold)}
+.acc.hi{background:color-mix(in srgb,var(--jade) 20%,transparent);color:var(--jade)}
+.controls{display:flex;gap:10px;flex-wrap:wrap}
+.controls input,.controls select{background:var(--ink);border:1px solid var(--line);border-radius:6px;color:var(--paper);font:inherit;padding:.45rem .7rem;user-select:text}
+.controls input{flex:1;min-width:160px}
+.head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.muted{color:var(--muted)}
+.howto{display:grid;gap:10px;line-height:1.45;color:var(--paper)}
+.howto p{margin:0}
+.howto b{color:var(--gold)}
+.opt{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--panel2);border-radius:8px;padding:10px 12px;flex-wrap:wrap}
+.opt label{font-weight:600}
+.opt small{display:block;color:var(--muted);font-weight:400}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{background:transparent;border:0;padding:.35rem .75rem;font-size:.9rem}
+.seg button[aria-pressed="true"]{background:var(--gold);color:#1a1300;font-weight:700}
+.empty-note{color:var(--muted);text-align:center;padding:20px}
+.field{background:var(--ink);border:1px solid var(--line);border-radius:6px;color:var(--paper);font:inherit;padding:.45rem .7rem;user-select:text;min-width:0}
+.field:focus{border-color:var(--gold);outline:none}
+.opt .row{flex:1;justify-content:flex-end}
+.opt form.row .field{flex:1;max-width:260px}
+label.btn{display:inline-block}
+tr.me td{background:color-mix(in srgb,var(--gold) 12%,transparent)}
+.online{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;justify-content:space-between;background:var(--panel2);border-radius:8px;padding:12px 14px}
+.online label small{display:block;color:var(--muted);font-weight:400}
+.online form{display:flex;gap:8px;flex:1;justify-content:flex-end;min-width:min(100%,260px)}
+.online form .field{flex:1;max-width:240px}
+@media (max-width:640px){
+  .cards{grid-template-columns:1fr}
+  .card{grid-template-columns:auto 1fr;justify-items:start;text-align:left;column-gap:14px;padding-top:26px}
+  .card .big{grid-row:span 3;margin:0;font-size:3.2rem}
+  .card .en{min-height:0}
+  .card .buff{grid-column:1/-1}
+  .panel{padding:18px}
+  #hearts{font-size:1.25rem}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<canvas id="cv"></canvas>
+
+<div id="hud" hidden>
+  <div class="xpbar"><i id="xpfill"></i></div>
+  <div class="hud-top">
+    <div id="hearts"></div>
+    <div class="hud-mid"><span id="clock">0:00</span><span id="lvl">Level 1</span></div>
+    <div class="hud-right"><span id="kills" title="Defeated">0</span><button id="pauseBtn" type="button">Pause</button></div>
+  </div>
+  <div class="status">
+    <span class="chip test" id="testChip" hidden>Test in <b id="testT">0</b>s</span>
+    <span class="chip focus" id="focusChip" hidden>Focus · damage ×1.5</span>
+    <span class="chip streak" id="streakChip" hidden></span>
+  </div>
+  <div id="bossbar" hidden>年兽 Nian<div><i id="bossfill"></i></div></div>
+  <div id="coll"></div>
+</div>
+
+<!-- Menu -->
+<div id="menu" class="ov clear">
+  <div class="panel">
+    <div class="logo" aria-hidden="true">汉字<span>幸</span>存者</div>
+    <p class="sub">Hanzi Survivor</p>
+    <p class="tag">Survive the night with characters as your weapons. Pick a class to set your word list, from HSK&nbsp;1 up to HSK&nbsp;3. Each level, draft one of three words. Pop tests check that you can still name them.</p>
+    <div class="menu-btns">
+      <button class="btn" id="playBtn" type="button">Start run</button>
+      <button class="btn ghost" id="wordsBtn" type="button">Word list</button>
+      <button class="btn ghost" id="boardBtn" type="button" hidden>Global leaderboard</button>
+      <button class="btn ghost" id="scoresBtn" type="button">My best runs</button>
+      <button class="btn ghost" id="setBtn" type="button">How to play &amp; settings</button>
+    </div>
+    <p class="lifetime" id="lifetime"></p>
+    <p class="sync" id="sync">Progress saves in this browser.</p>
+  </div>
+</div>
+
+<!-- Class select -->
+<div id="classes" class="ov" hidden>
+  <div class="panel">
+    <div class="head"><div><p class="eyebrow">New run</p><h2>Choose your class</h2></div>
+      <div class="row"><p class="hint">Press 1, 2 or 3</p><button class="btn ghost" id="classBack" type="button">Back</button></div></div>
+    <div class="cards" id="classCards"></div>
+  </div>
+</div>
+
+<!-- Draft -->
+<div id="draft" class="ov" hidden>
+  <div class="panel">
+    <div class="head"><div><p class="eyebrow" id="draftEye">Level up</p><h2 id="draftTitle">Choose a character</h2></div><p class="hint">Press 1, 2 or 3</p></div>
+    <div class="cards" id="cards"></div>
+  </div>
+</div>
+
+<!-- Quiz -->
+<div id="quiz" class="ov" hidden>
+  <div class="panel quizp">
+    <p class="eyebrow" id="qkind">Pop test</p>
+    <div class="qhz" id="qhz">字</div>
+    <div id="qask" style="display:grid;gap:12px;width:100%;justify-items:center">
+      <p class="qprompt" id="qprompt">Type the pinyin</p>
+      <form id="qform" autocomplete="off"><input id="qin" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done" aria-label="Your answer"><button class="btn" type="submit">Answer</button></form>
+      <div class="qtimer"><i id="qbar"></i></div>
+      <button class="btn ghost" id="qskip" type="button">I don't know</button>
+    </div>
+    <div id="qres" hidden>
+      <p class="verdict" id="qverdict"></p>
+      <p class="answer" id="qanswer"></p>
+      <p class="yours" id="qyours"></p>
+      <p class="note" id="qnote"></p>
+      <button class="btn" id="qcont" type="button">Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pause -->
+<div id="pause" class="ov" hidden>
+  <div class="panel">
+    <div class="head"><div><p class="eyebrow" id="pauseEye">Paused</p><h2>Your characters</h2></div>
+      <div class="row"><button class="btn" id="resumeBtn" type="button">Resume</button><button class="btn danger" id="quitBtn" type="button">End run</button></div></div>
+    <div class="grid2">
+      <div style="display:grid;gap:10px;align-content:start"><p class="eyebrow">Study them while you can</p><div class="list" id="pauseColl"></div></div>
+      <div style="display:grid;gap:10px;align-content:start"><p class="eyebrow">Build</p><div class="list" id="pauseBuild"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Game over -->
+<div id="over" class="ov" hidden>
+  <div class="panel">
+    <div class="head"><div><p class="eyebrow" id="overEye">Run over</p><h2 id="overTitle">The night wins</h2></div>
+      <div class="row"><button class="btn" id="againBtn" type="button">Run again</button><button class="btn ghost" id="menuBtn" type="button">Menu</button></div></div>
+    <div class="stats" id="overStats"></div>
+    <div class="online" id="overOnline" hidden></div>
+    <p class="eyebrow">Words this run</p>
+    <div class="list" id="overWords"></div>
+  </div>
+</div>
+
+<!-- Global leaderboard -->
+<div id="board" class="ov" hidden>
+  <div class="panel">
+    <div class="head"><div><p class="eyebrow">Everyone</p><h2>Global leaderboard</h2></div><button class="btn ghost back" type="button">Back</button></div>
+    <div class="row" style="justify-content:space-between">
+      <div class="seg" id="bPeriod"><button type="button" data-v="day">Today</button><button type="button" data-v="week">This week</button><button type="button" data-v="all">All time</button></div>
+      <div class="seg" id="bClass"><button type="button" data-v="student">学生 HSK 1</button><button type="button" data-v="scholar">书生 HSK 1–2</button><button type="button" data-v="sage">大师 HSK 1–3</button></div>
+    </div>
+    <p class="muted" id="bNote" style="margin:0"></p>
+    <div class="tablewrap" id="boardTable"></div>
+    <div class="online">
+      <label for="nameIn">Your leaderboard name<small>Used for runs you post from now on</small></label>
+      <form id="nameForm" autocomplete="off"><input class="field" id="nameIn" type="text" maxlength="20" placeholder="Pick a name" spellcheck="false"><button class="btn ghost" type="submit">Save</button></form>
+    </div>
+  </div>
+</div>
+
+<!-- Scores -->
+<div id="scores" class="ov" hidden>
+  <div class="panel">
+    <div class="head"><div><p class="eyebrow">This browser</p><h2>My best runs</h2></div><button class="btn ghost back" type="button">Back</button></div>
+    <div class="controls"><select id="sfilter" aria-label="Filter by class"><option value="all">All classes</option><option value="student">学生 Student · HSK 1</option><option value="scholar">书生 Scholar · HSK 1–2</option><option value="sage">大师 Sage · HSK 1–3</option></select></div>
+    <p class="muted" style="margin:0">Ranked by words learned: different words you answered correctly at least once in the run. Ties go to the longer survival time.</p>
+    <div class="tablewrap" id="scoreTable"></div>
+  </div>
+</div>
+
+<!-- Word list -->
+<div id="words" class="ov" hidden>
+  <div class="panel">
+    <div class="head"><div><p class="eyebrow">HSK 1–3 · <span id="wcount"></span></p><h2>Word list</h2></div><button class="btn ghost back" type="button">Back</button></div>
+    <div class="controls">
+      <input id="wsearch" type="search" placeholder="Search character, pinyin or meaning" aria-label="Search words">
+      <select id="wlevel" aria-label="HSK level">
+        <option value="all">All levels</option><option value="1">HSK 1</option><option value="2">HSK 2</option><option value="3">HSK 3</option>
+      </select>
+      <select id="wsort" aria-label="Sort words">
+        <option value="hsk">HSK order</option>
+        <option value="weak">Weakest first</option>
+        <option value="strong">Strongest first</option>
+        <option value="most">Most tested</option>
+        <option value="unseen">Not met yet first</option>
+      </select>
+    </div>
+    <div class="tablewrap" id="wordTable"></div>
+  </div>
+</div>
+
+<!-- Settings / how to -->
+<div id="settings" class="ov" hidden>
+  <div class="panel narrow">
+    <div class="head"><div><p class="eyebrow">Field guide</p><h2>How to play</h2></div><button class="btn ghost back" type="button">Back</button></div>
+    <div class="howto">
+      <p><b>Move</b> with WASD or the arrow keys. On a phone, drag anywhere. Your weapons aim and fire on their own. <b>Esc</b> pauses.</p>
+      <p><b>Hearts.</b> You lose one when an enemy or bullet touches you, and one for every wrong test answer.</p>
+      <p><b>Classes</b> set which words can show up. 学生 Student uses HSK 1, 书生 Scholar uses HSK 1–2, and 大师 Sage uses HSK 1–3. Each class also has its own starting weapons and a perk.</p>
+      <p><b>Level up</b> by collecting jade drops. Each level you draft one of three characters, and each one comes with a random buff.</p>
+      <p><b>Pop tests</b> arrive every 20 to 30 seconds and ask you about a character you drafted this run. A right answer raises that character's mastery (up to 3), which makes its buff stronger. It also gives a burst of XP and 6 seconds of extra damage. Five right in a row heals a heart. A wrong answer costs a heart and a mastery point.</p>
+      <p><b>Gold scrolls</b> dropped by elites start a bonus test. Pass it to draft a rare character.</p>
+    </div>
+    <div class="opt"><label>Questions<small>What the tests ask for</small></label>
+      <div class="seg" id="optMode"><button type="button" data-v="mix">Mixed</button><button type="button" data-v="pinyin">Pinyin</button><button type="button" data-v="meaning">Meaning</button></div></div>
+    <div class="opt"><label>Require tones<small>Off: "nihao" is fine. On: type ni3hao3 or nǐhǎo</small></label>
+      <div class="seg" id="optTones"><button type="button" data-v="0">Off</button><button type="button" data-v="1">On</button></div></div>
+    <div class="opt"><label>Answer time<small>Seconds per test question</small></label>
+      <div class="seg" id="optTime"><button type="button" data-v="12">12</button><button type="button" data-v="20">20</button><button type="button" data-v="30">30</button></div></div>
+    <div class="opt"><label>Your save<small>Move your runs and word stats to another browser or device</small></label>
+      <div class="row"><button class="btn ghost" id="exportBtn" type="button">Export</button><label class="btn ghost" for="importFile" tabindex="0" id="importLbl">Import</label><input type="file" id="importFile" accept=".json,application/json" hidden></div>
+      <p class="muted" id="saveMsg" style="margin:0;width:100%" hidden></p></div>
+    <div class="opt"><label>Speak words<small>Read the character aloud after each test, if your device has a Chinese voice</small></label>
+      <div class="seg" id="optSpeak"><button type="button" data-v="1">On</button><button type="button" data-v="0">Off</button></div></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ================= HSK vocabulary (HSK 2.0 word lists) =================
+   character | pinyin (space between syllables) | accepted meanings (first is shown) */
+const RAW = `爱|ài|love;to love
+八|bā|eight;8
+爸爸|bà ba|dad;father;daddy;papa
+杯子|bēi zi|cup;glass;mug
+北京|běi jīng|Beijing;Peking
+本|běn|measure word for books;classifier for books;book measure word;measure word;classifier;volume
+不|bù|not;no
+不客气|bú kè qi|you're welcome;you are welcome;no problem;don't mention it
+菜|cài|dish;vegetable;vegetables;food;cuisine
+茶|chá|tea
+吃|chī|eat;to eat
+出租车|chū zū chē|taxi;cab
+打电话|dǎ diàn huà|make a phone call;phone call;call;to call;to phone;telephone
+大|dà|big;large
+的|de|possessive particle;particle;of;'s
+点|diǎn|o'clock;dot;point;a little;to order
+电脑|diàn nǎo|computer
+电视|diàn shì|television;tv
+电影|diàn yǐng|movie;film
+东西|dōng xi|thing;things;stuff
+都|dōu|all;both
+读|dú|read;to read;study
+对不起|duì bu qǐ|sorry;I'm sorry;excuse me
+多|duō|many;much;a lot;more
+多少|duō shao|how many;how much
+儿子|ér zi|son
+二|èr|two;2
+饭店|fàn diàn|restaurant;hotel
+飞机|fēi jī|airplane;plane;aeroplane;aircraft
+分钟|fēn zhōng|minute;minutes
+高兴|gāo xìng|happy;glad;pleased
+个|gè|general measure word;measure word;classifier;general classifier
+工作|gōng zuò|work;job;to work
+狗|gǒu|dog
+汉语|hàn yǔ|Chinese language;Chinese;Mandarin
+好|hǎo|good;well;fine;ok;okay
+号|hào|number;date;day of the month;size
+喝|hē|drink;to drink
+和|hé|and;with
+很|hěn|very;quite
+后面|hòu miàn|behind;back;rear;at the back
+回|huí|return;go back;come back;to return
+会|huì|can;be able to;will;know how to
+火车站|huǒ chē zhàn|train station;railway station;station
+几|jǐ|how many;several;a few
+家|jiā|home;family;house
+叫|jiào|to be called;called;named;call;to call;shout
+今天|jīn tiān|today
+九|jiǔ|nine;9
+开|kāi|open;to open;drive;turn on;start
+看|kàn|look;see;watch;read;to look
+看见|kàn jiàn|see;to see;catch sight of
+块|kuài|piece;yuan;dollar;kuai;lump;measure word for money
+来|lái|come;to come
+老师|lǎo shī|teacher
+了|le|completed action particle;particle;past tense particle;change of state particle
+冷|lěng|cold
+里|lǐ|inside;in;within
+零|líng|zero;0
+六|liù|six;6
+妈妈|mā ma|mom;mother;mum;mommy;mama
+吗|ma|question particle;particle;yes no question particle
+买|mǎi|buy;to buy
+猫|māo|cat
+没关系|méi guān xi|it doesn't matter;doesn't matter;no problem;never mind;that's ok;it's ok;it's okay;that's okay
+没有|méi yǒu|not have;don't have;there is not;there isn't;haven't;didn't;without;none
+米饭|mǐ fàn|cooked rice;rice
+名字|míng zi|name
+明天|míng tiān|tomorrow
+哪|nǎ|which
+哪儿|nǎr|where
+那|nà|that
+呢|ne|question particle;particle;what about
+能|néng|can;be able to;able
+你|nǐ|you
+年|nián|year
+女儿|nǚ ér|daughter
+朋友|péng you|friend
+漂亮|piào liang|pretty;beautiful
+苹果|píng guǒ|apple
+七|qī|seven;7
+前面|qián miàn|in front;front;ahead
+钱|qián|money
+请|qǐng|please;invite;to invite;ask
+去|qù|go;to go
+热|rè|hot;heat
+人|rén|person;people;man;human
+认识|rèn shi|to know;know;recognize;meet;be acquainted with
+日|rì|day;sun;date
+三|sān|three;3
+商店|shāng diàn|shop;store
+上|shàng|up;on;above;go up;upper;previous
+上午|shàng wǔ|morning;before noon;am;forenoon
+少|shǎo|few;little;less
+谁|shéi|who;whom
+什么|shén me|what
+十|shí|ten;10
+时候|shí hou|time;when;moment
+是|shì|to be;be;is;am;are;yes
+书|shū|book
+水|shuǐ|water
+水果|shuǐ guǒ|fruit
+睡觉|shuì jiào|to sleep;sleep;go to bed
+说|shuō|speak;say;talk;to speak;to say
+四|sì|four;4
+岁|suì|years old;year of age;age;years
+他|tā|he;him
+她|tā|she;her
+太|tài|too;extremely;very;excessively
+天气|tiān qì|weather
+听|tīng|listen;hear;to listen
+同学|tóng xué|classmate;schoolmate
+喂|wèi|hello (on the phone);hello;hey
+我|wǒ|I;me
+我们|wǒ men|we;us
+五|wǔ|five;5
+喜欢|xǐ huan|to like;like;be fond of
+下|xià|down;below;under;next;go down;fall
+下午|xià wǔ|afternoon;pm
+下雨|xià yǔ|to rain;rain;raining
+先生|xiān sheng|mister;mr;sir;husband;gentleman
+现在|xiàn zài|now;currently;at present
+想|xiǎng|want;think;miss;would like
+小|xiǎo|small;little;young
+小姐|xiǎo jiě|miss;young lady
+些|xiē|some;a few
+写|xiě|write;to write
+谢谢|xiè xie|thank you;thanks
+星期|xīng qī|week
+学生|xué sheng|student;pupil
+学习|xué xí|to study;study;learn;to learn
+学校|xué xiào|school
+一|yī|one;1
+一点儿|yì diǎnr|a little;a bit;a little bit;some
+衣服|yī fu|clothes;clothing
+医生|yī shēng|doctor
+医院|yī yuàn|hospital
+椅子|yǐ zi|chair
+有|yǒu|to have;have;has;there is;there are
+月|yuè|month;moon
+在|zài|at;in;be at;be located;exist;in the middle of
+再见|zài jiàn|goodbye;bye;see you;see you again
+怎么|zěn me|how;why
+怎么样|zěn me yàng|how about;how is it;how;how are things
+这|zhè|this
+中国|zhōng guó|China
+中午|zhōng wǔ|noon;midday
+住|zhù|to live;live;reside;stay
+桌子|zhuō zi|table;desk
+字|zì|character;word;Chinese character
+昨天|zuó tiān|yesterday
+坐|zuò|to sit;sit;take;ride
+做|zuò|to do;do;make;to make`;
+const RAW2 = `吧|ba|suggestion particle;particle;right
+白|bái|white
+百|bǎi|hundred;100
+帮助|bāng zhù|to help;help;assist
+报纸|bào zhǐ|newspaper;paper
+比|bǐ|compare;than;to compare
+别|bié|don't;other
+长|cháng|long
+唱歌|chàng gē|to sing;sing;sing a song
+出|chū|go out;exit;out;come out
+穿|chuān|to wear;wear;put on
+次|cì|time;times;occurrence;measure word for times
+从|cóng|from
+错|cuò|wrong;mistake;incorrect
+打篮球|dǎ lán qiú|play basketball;basketball
+大家|dà jiā|everyone;everybody;all
+到|dào|arrive;to arrive;to;reach;until
+得|de|structural particle;particle;complement particle
+等|děng|to wait;wait;etc
+弟弟|dì di|younger brother;little brother
+第一|dì yī|first;number one
+懂|dǒng|understand;to understand
+对|duì|correct;right;towards;to
+房间|fáng jiān|room
+非常|fēi cháng|very;extremely;unusual
+服务员|fú wù yuán|waiter;waitress;attendant;server
+高|gāo|tall;high
+告诉|gào su|to tell;tell;inform
+哥哥|gē ge|older brother;big brother
+给|gěi|to give;give;for
+公共汽车|gōng gòng qì chē|bus;public bus
+公司|gōng sī|company;firm
+贵|guì|expensive;noble
+过|guo|experience particle;particle;past experience
+还|hái|still;also;yet
+孩子|hái zi|child;children;kid
+好吃|hǎo chī|delicious;tasty
+黑|hēi|black;dark
+红|hóng|red
+欢迎|huān yíng|welcome;to welcome
+回答|huí dá|answer;to answer;reply
+机场|jī chǎng|airport
+鸡蛋|jī dàn|egg;chicken egg
+件|jiàn|measure word for clothes;measure word for items;piece;item
+教室|jiào shì|classroom
+姐姐|jiě jie|older sister;big sister
+介绍|jiè shào|to introduce;introduce;introduction
+进|jìn|enter;to enter;come in;go in
+近|jìn|near;close
+就|jiù|then;just;only;right away
+觉得|jué de|to feel;feel;think
+咖啡|kā fēi|coffee
+开始|kāi shǐ|to begin;begin;start;to start
+考试|kǎo shì|exam;test;examination;take an exam
+可能|kě néng|maybe;possible;perhaps;possibly
+可以|kě yǐ|can;may;ok
+课|kè|class;lesson;course
+快|kuài|fast;quick;quickly;soon
+快乐|kuài lè|happy;joyful
+累|lèi|tired
+离|lí|away from;from;distance from
+两|liǎng|two;both;a couple
+路|lù|road;path;way
+旅游|lǚ yóu|to travel;travel;tour;tourism
+卖|mài|to sell;sell
+慢|màn|slow;slowly
+忙|máng|busy
+每|měi|every;each
+妹妹|mèi mei|younger sister;little sister
+门|mén|door;gate
+面条|miàn tiáo|noodles;noodle
+男|nán|male;man
+您|nín|you (polite);you
+牛奶|niú nǎi|milk;cow milk
+女|nǚ|female;woman
+旁边|páng biān|beside;next to;side
+跑步|pǎo bù|to run;run;jog;running
+便宜|pián yi|cheap;inexpensive
+票|piào|ticket
+妻子|qī zi|wife
+起床|qǐ chuáng|get up;to get up;get out of bed
+千|qiān|thousand;1000
+铅笔|qiān bǐ|pencil
+晴|qíng|sunny;clear;fine
+去年|qù nián|last year
+让|ràng|to let;let;allow;make
+上班|shàng bān|go to work;to work;start work
+身体|shēn tǐ|body;health
+生病|shēng bìng|get sick;fall ill;sick;ill
+生日|shēng rì|birthday
+时间|shí jiān|time
+事情|shì qing|thing;matter;affair
+手表|shǒu biǎo|watch;wristwatch
+手机|shǒu jī|mobile phone;cell phone;phone;cellphone
+说话|shuō huà|to speak;speak;talk;to talk
+送|sòng|to give;give;send;deliver;see off
+虽然|suī rán|although;though
+但是|dàn shì|but;however
+它|tā|it
+踢足球|tī zú qiú|play soccer;play football;soccer;football
+题|tí|question;problem;topic
+跳舞|tiào wǔ|to dance;dance
+外|wài|outside;out;foreign
+完|wán|finish;to finish;complete;done
+玩|wán|to play;play;have fun
+晚上|wǎn shang|evening;night;in the evening
+往|wǎng|towards;to
+为什么|wèi shén me|why
+问|wèn|to ask;ask
+问题|wèn tí|question;problem;issue
+西瓜|xī guā|watermelon
+希望|xī wàng|to hope;hope;wish
+洗|xǐ|to wash;wash
+小时|xiǎo shí|hour
+笑|xiào|to laugh;laugh;smile
+新|xīn|new
+姓|xìng|surname;family name;be surnamed
+休息|xiū xi|to rest;rest;take a break
+雪|xuě|snow
+颜色|yán sè|colour;color
+眼睛|yǎn jing|eye;eyes
+羊肉|yáng ròu|mutton;lamb
+药|yào|medicine;drug
+要|yào|want;need;will;to want
+也|yě|also;too;as well
+一起|yì qǐ|together
+一下|yí xià|a bit;once;one time;a little
+已经|yǐ jīng|already
+意思|yì si|meaning;idea
+因为|yīn wèi|because
+所以|suǒ yǐ|so;therefore
+阴|yīn|cloudy;overcast
+游泳|yóu yǒng|to swim;swim;swimming
+右边|yòu bian|right side;right;the right
+鱼|yú|fish
+远|yuǎn|far;distant
+运动|yùn dòng|sport;sports;exercise;movement
+再|zài|again
+早上|zǎo shang|morning;early morning
+丈夫|zhàng fu|husband
+找|zhǎo|to look for;look for;find;search
+着|zhe|continuous aspect particle;particle;-ing
+真|zhēn|really;true;real
+正在|zhèng zài|in the process of;currently;right now
+知道|zhī dào|to know;know;be aware
+准备|zhǔn bèi|to prepare;prepare;get ready
+走|zǒu|to walk;walk;go;leave
+最|zuì|most;the most
+左边|zuǒ bian|left side;left;the left`;
+const RAW3 = `阿姨|ā yí|aunt;auntie
+啊|a|exclamation particle;particle;ah;oh
+矮|ǎi|short (height);short;low
+爱好|ài hào|hobby;interest
+安静|ān jìng|quiet;peaceful
+把|bǎ|disposal particle;handle;measure word;particle
+班|bān|class;team;shift
+搬|bān|to move;move;carry
+办法|bàn fǎ|way;method;means
+办公室|bàn gōng shì|office
+半|bàn|half
+帮忙|bāng máng|to help;help;do a favor
+包|bāo|bag;wrap;package
+饱|bǎo|full (from eating);full
+北方|běi fāng|north;the north;northern
+被|bèi|by (passive);by;passive marker;quilt
+鼻子|bí zi|nose
+比较|bǐ jiào|relatively;fairly;compare;comparatively
+比赛|bǐ sài|match;competition;game;contest
+笔记本|bǐ jì běn|notebook;laptop
+必须|bì xū|must;have to
+变化|biàn huà|change;to change;variation
+别人|bié rén|other people;others
+冰箱|bīng xiāng|refrigerator;fridge
+不但|bú dàn|not only
+而且|ér qiě|but also;moreover;and
+菜单|cài dān|menu
+参加|cān jiā|participate;join;attend;take part
+草|cǎo|grass
+层|céng|floor;layer;storey;story
+差|chà|lack;poor;bad;short of;differ
+超市|chāo shì|supermarket
+衬衫|chèn shān|shirt
+成绩|chéng jì|grade;grades;score;result;achievement
+城市|chéng shì|city
+迟到|chí dào|be late;late;arrive late
+除了|chú le|except;besides;apart from
+船|chuán|boat;ship
+春|chūn|spring
+才|cái|only then;just;not until;talent
+词典|cí diǎn|dictionary
+词语|cí yǔ|word;term;words
+聪明|cōng míng|clever;smart;intelligent
+打扫|dǎ sǎo|to clean;clean;sweep
+打算|dǎ suàn|plan;to plan;intend
+带|dài|bring;take;carry;belt
+担心|dān xīn|to worry;worry;be anxious
+蛋糕|dàn gāo|cake
+当然|dāng rán|of course;certainly;naturally
+地|de|adverbial particle;particle;-ly
+灯|dēng|lamp;light
+低|dī|low
+地方|dì fang|place;location
+地铁|dì tiě|subway;metro;underground
+地图|dì tú|map
+电梯|diàn tī|elevator;lift
+电子邮件|diàn zǐ yóu jiàn|email;e-mail
+东|dōng|east
+冬|dōng|winter
+动物|dòng wù|animal
+短|duǎn|short (length);short
+段|duàn|section;paragraph;period;segment
+锻炼|duàn liàn|to exercise;exercise;work out;train
+多么|duō me|how;so;what
+饿|è|hungry
+耳朵|ěr duo|ear;ears
+发|fā|to send;send;issue;emit
+发烧|fā shāo|have a fever;fever
+发现|fā xiàn|discover;find;to discover;discovery
+方便|fāng biàn|convenient
+放|fàng|put;place;let go;to put
+放心|fàng xīn|rest assured;don't worry;relax;be at ease
+分|fēn|divide;point;cent;minute;to divide
+复习|fù xí|review;revise;to review
+附近|fù jìn|nearby;vicinity;near
+干净|gān jìng|clean
+感冒|gǎn mào|catch a cold;cold;have a cold
+感兴趣|gǎn xìng qù|be interested in;interested;be interested
+刚才|gāng cái|just now;a moment ago
+个子|gè zi|height;stature;build
+根据|gēn jù|according to;based on;basis
+跟|gēn|with;follow;and
+更|gèng|more;even more
+公斤|gōng jīn|kilogram;kilo;kg
+公园|gōng yuán|park
+故事|gù shi|story;tale
+刮风|guā fēng|windy;wind blows;wind
+关|guān|close;shut;turn off;to close
+关系|guān xi|relationship;relation;connection
+关心|guān xīn|care about;concern;to care
+关于|guān yú|about;concerning;regarding
+国家|guó jiā|country;nation;state
+果汁|guǒ zhī|juice;fruit juice
+害怕|hài pà|be afraid;afraid;scared;fear
+河|hé|river
+黑板|hēi bǎn|blackboard
+护照|hù zhào|passport
+花|huā|flower;spend;to spend
+画|huà|draw;paint;picture;painting
+坏|huài|bad;broken
+环境|huán jìng|environment;surroundings
+换|huàn|change;exchange;to change
+黄河|huáng hé|Yellow River;Huang He
+会议|huì yì|meeting;conference
+或者|huò zhě|or
+几乎|jī hū|almost;nearly
+机会|jī huì|opportunity;chance
+极|jí|extremely;pole;extreme
+记得|jì de|remember;to remember
+季节|jì jié|season
+检查|jiǎn chá|check;examine;inspect;inspection
+简单|jiǎn dān|simple;easy
+见面|jiàn miàn|to meet;meet;see each other
+健康|jiàn kāng|healthy;health
+讲|jiǎng|speak;explain;tell;to speak
+教|jiāo|teach;to teach
+角|jiǎo|angle;corner;horn;jiao
+脚|jiǎo|foot;feet
+接|jiē|pick up;receive;meet;connect
+街道|jiē dào|street;road
+节目|jié mù|program;programme;show
+节日|jié rì|festival;holiday
+结婚|jié hūn|marry;get married;to marry
+结束|jié shù|end;finish;to end;conclude
+解决|jiě jué|solve;resolve;settle
+借|jiè|borrow;lend;to borrow
+经常|jīng cháng|often;frequently
+经过|jīng guò|pass;go through;pass by;after
+经理|jīng lǐ|manager
+久|jiǔ|long time;long;for a long time
+旧|jiù|old (things);old;used;worn
+句子|jù zi|sentence
+决定|jué dìng|decide;decision;to decide
+可爱|kě ài|cute;lovely;adorable
+渴|kě|thirsty
+刻|kè|quarter (hour);quarter;carve;moment
+客人|kè rén|guest;visitor
+空调|kōng tiáo|air conditioner;air conditioning;ac
+口|kǒu|mouth;opening;measure word for people
+哭|kū|cry;weep;to cry
+裤子|kù zi|trousers;pants
+筷子|kuài zi|chopsticks
+蓝|lán|blue
+老|lǎo|old;aged
+离开|lí kāi|leave;to leave;depart
+礼物|lǐ wù|gift;present
+历史|lì shǐ|history
+脸|liǎn|face
+练习|liàn xí|practice;exercise;to practice;practise
+辆|liàng|measure word for vehicles;vehicle measure word
+了解|liǎo jiě|understand;know about;find out
+邻居|lín jū|neighbor;neighbour;neighbors
+留学|liú xué|study abroad
+楼|lóu|building;floor;storey
+绿|lǜ|green
+马|mǎ|horse
+马上|mǎ shàng|immediately;at once;right away
+满意|mǎn yì|satisfied;pleased
+帽子|mào zi|hat;cap
+米|mǐ|meter;metre;rice
+面包|miàn bāo|bread
+明白|míng bai|understand;clear;to understand
+拿|ná|take;hold;carry;to take
+奶奶|nǎi nai|grandma;grandmother;granny
+南|nán|south
+难|nán|difficult;hard
+难过|nán guò|sad;upset;feel sad
+年级|nián jí|grade;year (school);school year
+年轻|nián qīng|young
+鸟|niǎo|bird
+努力|nǔ lì|work hard;effort;strive;hard-working
+爬山|pá shān|climb mountains;hike;mountain climbing;climb a mountain
+盘子|pán zi|plate;dish;tray
+胖|pàng|fat;chubby
+皮鞋|pí xié|leather shoes
+啤酒|pí jiǔ|beer
+瓶子|píng zi|bottle
+其实|qí shí|actually;in fact
+其他|qí tā|other;others
+奇怪|qí guài|strange;weird;odd
+骑|qí|ride;to ride
+起飞|qǐ fēi|take off;takeoff
+起来|qǐ lai|get up;rise;stand up
+清楚|qīng chu|clear;clearly
+请假|qǐng jià|ask for leave;take time off;request leave
+秋|qiū|autumn;fall
+裙子|qún zi|skirt;dress
+然后|rán hòu|then;afterwards;after that
+热情|rè qíng|enthusiastic;warm;passion
+认为|rèn wéi|think;believe;consider
+认真|rèn zhēn|serious;conscientious;earnest;seriously
+容易|róng yì|easy
+如果|rú guǒ|if
+伞|sǎn|umbrella
+上网|shàng wǎng|go online;use the internet;surf the internet
+生气|shēng qì|angry;get angry
+声音|shēng yīn|sound;voice
+世界|shì jiè|world
+试|shì|try;to try;test
+瘦|shòu|thin;slim
+叔叔|shū shu|uncle
+舒服|shū fu|comfortable
+树|shù|tree
+数学|shù xué|math;mathematics;maths
+刷牙|shuā yá|brush teeth;brush your teeth
+双|shuāng|pair;double;two
+水平|shuǐ píng|level;standard
+司机|sī jī|driver
+太阳|tài yáng|sun
+特别|tè bié|special;especially;particularly
+疼|téng|hurt;ache;painful;pain
+提高|tí gāo|improve;raise;increase
+体育|tǐ yù|sports;physical education;pe
+甜|tián|sweet
+条|tiáo|measure word for long things;strip;measure word
+同事|tóng shì|colleague;coworker
+同意|tóng yì|agree;to agree;consent
+头发|tóu fa|hair
+突然|tū rán|suddenly;sudden
+图书馆|tú shū guǎn|library
+腿|tuǐ|leg
+完成|wán chéng|complete;finish;accomplish
+碗|wǎn|bowl
+万|wàn|ten thousand;10000
+忘记|wàng jì|forget;to forget
+为|wèi|for;for the sake of
+为了|wèi le|in order to;for;so as to
+位|wèi|measure word for people;position;seat
+文化|wén huà|culture
+西|xī|west
+习惯|xí guàn|habit;be used to;custom
+洗手间|xǐ shǒu jiān|restroom;toilet;bathroom;washroom
+洗澡|xǐ zǎo|take a bath;shower;bathe;take a shower
+夏|xià|summer
+先|xiān|first;before;earlier
+相信|xiāng xìn|believe;trust;to believe
+香蕉|xiāng jiāo|banana
+向|xiàng|towards;to;direction
+像|xiàng|resemble;be like;like;similar
+小心|xiǎo xīn|careful;be careful;watch out
+校长|xiào zhǎng|principal;headmaster;president
+新闻|xīn wén|news
+新鲜|xīn xiān|fresh
+信|xìn|letter;believe;trust
+行李箱|xíng li xiāng|suitcase;luggage
+兴趣|xìng qù|interest;interests
+熊猫|xióng māo|panda;giant panda
+需要|xū yào|need;require;to need
+选择|xuǎn zé|choose;select;choice;option
+要求|yāo qiú|require;request;demand;requirement
+爷爷|yé ye|grandpa;grandfather
+一定|yí dìng|certainly;definitely;must;surely
+一共|yí gòng|altogether;in total;in all
+一会儿|yí huìr|a while;a moment;a little while
+一样|yí yàng|same;alike;the same
+一般|yì bān|general;ordinary;usually;generally
+一边|yì biān|one side;while;at the same time
+一直|yì zhí|always;straight;continuously;all along
+以前|yǐ qián|before;previously;ago;in the past
+以为|yǐ wéi|thought;think mistakenly;assume
+音乐|yīn yuè|music
+银行|yín háng|bank
+饮料|yǐn liào|drink;beverage
+应该|yīng gāi|should;ought to
+影响|yǐng xiǎng|influence;affect;effect;impact
+用|yòng|use;to use
+游戏|yóu xì|game;play
+有名|yǒu míng|famous;well-known
+又|yòu|again;also;both
+遇到|yù dào|encounter;meet;run into;come across
+元|yuán|yuan;dollar
+愿意|yuàn yì|be willing;willing;wish
+月亮|yuè liang|moon
+越|yuè|more;exceed;the more
+站|zhàn|stand;station;stop;to stand
+张|zhāng|measure word for flat things;sheet;open
+着急|zháo jí|anxious;worried;in a hurry;worry
+照顾|zhào gu|take care of;look after;care for
+照片|zhào piàn|photo;picture;photograph
+照相机|zhào xiàng jī|camera
+只|zhǐ|only;just;merely
+中间|zhōng jiān|middle;between;center
+中文|zhōng wén|Chinese;Chinese language
+终于|zhōng yú|finally;at last
+种|zhǒng|kind;type;sort
+重要|zhòng yào|important
+周末|zhōu mò|weekend
+主要|zhǔ yào|main;major;mainly
+注意|zhù yì|pay attention;notice;attention;be careful
+自己|zì jǐ|oneself;self;myself;yourself
+自行车|zì xíng chē|bicycle;bike
+总是|zǒng shì|always
+嘴|zuǐ|mouth
+最后|zuì hòu|last;finally;final;the last
+最近|zuì jìn|recently;lately
+作业|zuò yè|homework;assignment
+作用|zuò yòng|effect;function;role`;
+
+const WORDS = [[RAW, 1], [RAW2, 2], [RAW3, 3]].flatMap(([raw, lvl]) => raw.trim().split('\n').map(l => {
+  const [h, py, en] = l.split('|');
+  return { h, syl: py.split(' '), py: py.replace(/ /g, ''), en: en.split(';'), lvl };
+})).map((w, i) => (w.i = i, w));
+const tierCount = t => WORDS.filter(w => w.lvl <= t).length;
+const WBY = Object.fromEntries(WORDS.map(w => [w.h, w]));
+
+/* ================= utilities ================= */
+const $ = s => document.querySelector(s);
+const TAU = Math.PI * 2;
+const rand = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function pickW(arr, wf) {
+  let tot = 0; const ws = arr.map(x => { const w = Math.max(0, wf(x)); tot += w; return w; });
+  let r = Math.random() * tot;
+  for (let i = 0; i < arr.length; i++) { r -= ws[i]; if (r <= 0) return arr[i]; }
+  return arr[arr.length - 1];
+}
+const fmtTime = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+const pct = (c, n) => n ? Math.round(100 * c / n) : null;
+function accChip(c, n) {
+  const p = pct(c, n);
+  if (p == null) return '<span class="acc none">–</span>';
+  return `<span class="acc ${p < 50 ? 'lo' : p < 80 ? 'md' : 'hi'}">${p}%</span><span class="muted"> ${c}/${n}</span>`;
+}
+
+/* ---------- pinyin ---------- */
+const TONE_MARK = { '̄': 1, '́': 2, '̌': 3, '̀': 4 };
+function toneSeq(s) { const out = []; for (const c of s.normalize('NFD')) if (TONE_MARK[c]) out.push(TONE_MARK[c]); return out; }
+function pyLetters(s) { return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/v/g, 'u').replace(/[^a-z]/g, ''); }
+function sylTone(s) { return toneSeq(s)[0] || 5; }
+function pyHTML(w) {
+  return w.syl.map((s, i) => {
+    const a = i > 0 && /^[aeoāáǎàēéěèōóǒò]/.test(s) ? "'" : '';
+    return `<span class="t${sylTone(s)}">${a}${s}</span>`;
+  }).join('');
+}
+function checkPy(inp, w) {
+  if (pyLetters(inp) !== pyLetters(w.py)) return false;
+  if (!Settings.tones) return true;
+  const digits = (inp.match(/[1-4]/g) || []).map(Number);
+  const user = digits.length ? digits : toneSeq(inp);
+  const want = w.syl.map(x => ({ t: sylTone(x), l: pyLetters(x) })).filter(x => x.t !== 5);
+  return user.length === want.length && want.every((x, i) => x.t === user[i] ||
+    (x.l === 'yi' && [1, 2, 4].includes(user[i])) || (x.l === 'bu' && [2, 4].includes(user[i])));
+}
+/* ---------- meaning ---------- */
+function normEn(s) {
+  return s.toLowerCase().replace(/[’`]/g, "'").replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9' ]/g, ' ')
+    .replace(/\s+/g, ' ').trim().replace(/^(to|a|an|the) /, '');
+}
+function lev(a, b) {
+  const m = a.length, n = b.length; if (Math.abs(m - n) > 2) return 9;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n];
+}
+function checkEn(inp, w) {
+  const n = normEn(inp); if (!n) return false;
+  return w.en.some(m => {
+    const t = normEn(m); if (t === n) return true;
+    const tol = t.length >= 8 ? 2 : t.length >= 4 ? 1 : 0;
+    return tol > 0 && lev(t, n) <= tol;
+  });
+}
+const enShow = w => w.en.slice(0, 3).join(' · ');
+
+/* ---------- speech ---------- */
+let zhVoice = null;
+function findVoice() { try { zhVoice = speechSynthesis.getVoices().find(v => /^zh(-|_)?(CN|Hans)?/i.test(v.lang)) || null; } catch (e) { } }
+try { findVoice(); speechSynthesis.onvoiceschanged = findVoice; } catch (e) { }
+function speak(h) {
+  try { const u = new SpeechSynthesisUtterance(h); u.lang = 'zh-CN'; if (zhVoice) u.voice = zhVoice; u.rate = 0.85; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) { }
+}
+
+/* ================= persistence ================= */
+const KEY = 'hanzi-survivor-v1';
+const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { } };
+const Settings = (() => {
+  let s = { mode: 'mix', tones: false, qtime: 20, speak: true, cls: 'student' };
+  try { Object.assign(s, JSON.parse(localStorage.getItem(KEY + '-settings') || '{}')); } catch (e) { }
+  return s;
+})();
+function saveSettings() { try { localStorage.setItem(KEY + '-settings', JSON.stringify(Settings)); } catch (e) { } }
+
+const Store = {
+  data: { scores: [], words: {} }, doc: null, writing: false, dirty: false,
+  weight(d) { let n = (d.scores || []).length; for (const k in d.words || {}) { const s = d.words[k]; n += (s.pn || 0) + (s.mn || 0) + (s.d || 0); } return n; },
+  async init() {
+    try { const raw = localStorage.getItem(KEY); if (raw) this.data = Object.assign({ scores: [], words: {} }, JSON.parse(raw)); } catch (e) { }
+    renderMenu();
+    Online.flush();
+  },
+  saveLocal() { try { localStorage.setItem(KEY, JSON.stringify(this.data)); } catch (e) { } },
+  save(remote) { this.saveLocal(); if (remote && this.doc) this.flush(); },
+  async flush() {
+    if (!this.doc) return;
+    if (this.writing) { this.dirty = true; return; }
+    this.writing = true;
+    try { await this.doc.set(JSON.parse(JSON.stringify(this.data))); } catch (e) { }
+    this.writing = false;
+    if (this.dirty) { this.dirty = false; this.flush(); }
+  }
+};
+/* ================= global leaderboard (Supabase) =================
+   Paste your project's values from Supabase → Project Settings → API.
+   The anon / publishable key is meant to be public; the table's row-level security does the protecting.
+   Leave both blank and the game runs fully offline with no leaderboard. */
+const SUPABASE_URL = 'https://nwmneltjydrtnuwtkfrr.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_s1thiPYtS164iP2cBxggIg_NZd9jMR8';
+
+function uuid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = b[6] & 15 | 64; b[8] = b[8] & 63 | 128;
+  const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+const cleanName = v => String(v || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20);
+const Online = {
+  on: !!(SUPABASE_URL && SUPABASE_ANON_KEY),
+  get id() { let id = lsGet(KEY + '-player'); if (!id) { id = uuid(); lsSet(KEY + '-player', id); } return id; },
+  get name() { return lsGet(KEY + '-name') || ''; },
+  set name(v) { lsSet(KEY + '-name', cleanName(v)); },
+  async req(path, body, insert) {
+    const headers = { apikey: SUPABASE_ANON_KEY, 'Content-Type': 'application/json' };
+    if (!SUPABASE_ANON_KEY.startsWith('sb_')) headers.Authorization = 'Bearer ' + SUPABASE_ANON_KEY;
+    if (insert) headers.Prefer = 'return=minimal';
+    const r = await fetch(SUPABASE_URL.replace(/\/+$/, '') + '/rest/v1/' + path, { method: 'POST', headers, body: JSON.stringify(body) });
+    if (!r.ok) {
+      let msg = 'HTTP ' + r.status;
+      try { const j = await r.json(); msg = j.message || msg; } catch (e) { }
+      const err = new Error(msg); err.http = true; throw err;
+    }
+    return insert ? null : r.json();
+  },
+  pending() { try { return JSON.parse(lsGet(KEY + '-pending') || '[]'); } catch (e) { return []; } },
+  setPending(a) { lsSet(KEY + '-pending', JSON.stringify(a.slice(-10))); },
+  // ok → posted; error → the server rejected it; neither → offline, queued for next launch
+  async submit(row) {
+    if (!this.on) return { ok: false };
+    try { await this.req('scores', row, true); return { ok: true }; }
+    catch (e) {
+      if (e.http) return { ok: false, error: e.message };
+      const q = this.pending(); q.push(row); this.setPending(q); return { ok: false };
+    }
+  },
+  async flush() {
+    if (!this.on) return;
+    const keep = [];
+    for (const row of this.pending()) { try { await this.req('scores', row, true); } catch (e) { if (!e.http) keep.push(row); } }
+    this.setPending(keep);
+  },
+  board(cls, since) { return this.req('rpc/leaderboard', { p_cls: cls, p_since: since, p_limit: 50 }); },
+};
+
+function wstat(h) { return Store.data.words[h] || (Store.data.words[h] = { d: 0, pc: 0, pn: 0, mc: 0, mn: 0 }); }
+
+/* ================= weapons & buffs ================= */
+const WEAPONS = [
+  { id: 'brush', name: 'Brush Bolt', zh: '笔', desc: 'Flicks ink at the nearest enemy' },
+  { id: 'fan', name: 'Paper Fan', zh: '扇', desc: 'Sprays blades the way you move' },
+  { id: 'orbit', name: 'Ink Orbit', zh: '墨', desc: 'Ink drops circle around you' },
+  { id: 'nova', name: 'Firecracker', zh: '炮', desc: 'Bursts outward from you' },
+  { id: 'thunder', name: 'Thunder Seal', zh: '雷', desc: 'Calls lightning on enemies' },
+  { id: 'seal', name: 'Stone Seal', zh: '印', desc: 'Stamps mines that explode' },
+];
+const WBYID = Object.fromEntries(WEAPONS.map(w => [w.id, w]));
+const CLASSES = [
+  { id: 'student', zh: '学生', name: 'Student', tier: 1, hp: 1, kit: {}, trait: '+1 max heart',
+    blurb: 'Learn the HSK 1 basics with a little extra health to spare.' },
+  { id: 'scholar', zh: '书生', name: 'Scholar', tier: 2, xp: .15, kit: { fan: 1 }, trait: '+15% XP gain',
+    blurb: 'Adds HSK 2 words. Opens with a Paper Fan alongside the brush.' },
+  { id: 'sage', zh: '大师', name: 'Sage', tier: 3, kit: { thunder: 1 }, quizXp: .5, focus: 9, trait: 'Right answers give 50% more XP and 9s of Focus',
+    blurb: 'The full HSK 1 to 3 list. Opens with Thunder Seal alongside the brush.' },
+];
+const CBY = Object.fromEntries(CLASSES.map(c => [c.id, c]));
+const RAR = [{ n: 'Common', m: 1 }, { n: 'Rare', m: 1.6 }, { n: 'Epic', m: 2.4 }];
+const BUFFS = [
+  { id: 'dmg', kind: 'pct', v: .10, label: 'damage' },
+  { id: 'rate', kind: 'pct', v: .10, label: 'attack speed' },
+  { id: 'speed', kind: 'pct', v: .07, label: 'move speed' },
+  { id: 'area', kind: 'pct', v: .12, label: 'area' },
+  { id: 'pickup', kind: 'pct', v: .30, label: 'pickup range' },
+  { id: 'xp', kind: 'pct', v: .12, label: 'XP gain' },
+  { id: 'crit', kind: 'pct', v: .05, label: 'crit chance' },
+  { id: 'iframe', kind: 'sec', v: .15, label: 'invulnerability after a hit' },
+  { id: 'hp', kind: 'flat', v: 1, label: 'max heart', min: 1 },
+  { id: 'proj', kind: 'flat', v: 1, label: 'projectile', min: 1 },
+  { id: 'pierce', kind: 'flat', v: 1, label: 'pierce' },
+  ...WEAPONS.filter(w => w.id !== 'brush').map(w => ({ id: 'w_' + w.id, kind: 'weapon', weapon: w.id, label: w.name })),
+  { id: 'w_brush', kind: 'weapon', weapon: 'brush', label: 'Brush Bolt' },
+];
+const BBY = Object.fromEntries(BUFFS.map(b => [b.id, b]));
+function buffValue(b, r, m) {
+  if (b.kind === 'weapon') return (r === 2 ? 2 : 1) + m;
+  if (b.kind === 'flat') return b.v + (r === 2 && b.id !== 'proj' ? 1 : 0) + (m >= 3 ? 1 : 0);
+  return b.v * RAR[r].m * (1 + 0.5 * m);
+}
+function buffText(b, r, m) {
+  const v = buffValue(b, r, m);
+  switch (b.kind) {
+    case 'weapon': return `${b.label} +${v} level${v > 1 ? 's' : ''}`;
+    case 'flat': return `+${v} ${b.label}${v > 1 && b.id !== 'pierce' ? 's' : ''}`;
+    case 'sec': return `+${v.toFixed(2)}s ${b.label}`;
+    case 'regen': return `+${v.toFixed(1)} ${b.label}`;
+    default: return `+${Math.round(v * 100)}% ${b.label}`;
+  }
+}
+function buffSub(b) {
+  if (b.kind === 'weapon') return WBYID[b.weapon].desc + ' · each mastery point adds a level';
+  if (b.kind === 'flat') return 'One extra at mastery 3';
+  return 'Grows 50% per mastery point';
+}
+
+/* ================= enemies ================= */
+const ET = {
+  mote:    { hp: 14, spd: 74, r: 12, xp: 1, col: '#8f7dff' },
+  runner:  { hp: 9, spd: 128, r: 9, xp: 1, col: '#59c9e6' },
+  caster:  { hp: 26, spd: 72, r: 13, xp: 2, col: '#f0a050', ranged: true },
+  brute:   { hp: 72, spd: 46, r: 22, xp: 4, col: '#d16aa0' },
+  spinner: { hp: 46, spd: 32, r: 16, xp: 3, col: '#ff6f8a' },
+  elite:   { hp: 320, spd: 60, r: 28, xp: 20, col: '#f2c94c', glyph: '妖' },
+  nian:    { hp: 4200, spd: 52, r: 48, xp: 80, col: '#ff5a3c', glyph: '年', boss: true },
+};
+
+/* ================= canvas ================= */
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1, SCALE = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  SCALE = clamp(Math.min(W, H) / 760, 0.55, 1.15);
+}
+addEventListener('resize', resize); resize();
+
+/* ================= game state ================= */
+let G = null;
+const xpNeed = l => Math.round(4 + l * 2.6 + l * l * 0.28);
+
+function openClasses() {
+  $('#classCards').innerHTML = CLASSES.map((c, i) => `<div class="card-wrap"><button class="card${c.id === Settings.cls ? ' r2b' : ''}" type="button" data-c="${c.id}">
+    <span class="key">${i + 1}</span><span class="rar r${c.tier - 1}">HSK ${c.tier === 1 ? '1' : '1–' + c.tier}</span>
+    <span class="big">${c.zh}</span><span class="py">${c.name}</span><span class="en">${esc(c.blurb)}</span>
+    <span class="buff"><b class="r${c.tier - 1}">${tierCount(c.tier)} words</b><small>Brush Bolt${Object.keys(c.kit).map(k => ' + ' + WBYID[k].name).join('')} · ${esc(c.trait)}</small></span>
+  </button></div>`).join('');
+  $('#classCards').querySelectorAll('.card').forEach(el => el.onclick = () => newGame(el.dataset.c));
+  showOnly('classes');
+}
+function newGame(clsId) {
+  const cls = CBY[clsId] || CBY[Settings.cls] || CLASSES[0];
+  Settings.cls = cls.id; saveSettings();
+  G = {
+    cls, pool: WORDS.filter(w => w.lvl <= cls.tier),
+    state: 'play', t: 0, p: { x: 0, y: 0, fx: 1, fy: 0 }, hearts: 5, inv: 0,
+    lvl: 1, xp: 0, need: xpNeed(1), kills: 0,
+    en: [], pb: [], eb: [], orbs: [], pt: [], fx: [], tx: [], seals: [],
+    coll: [], mastery: {}, wt: {}, stats: null, wl: {},
+    spawnT: 1.5, eliteT: 120, bossAt: 300, quizT: 0, pendingDraft: 0, rareDraft: false,
+    streak: 0, bestStreak: 0, focus: 0, regenAcc: 0,
+    learned: new Set(), correct: 0, total: 0, results: {},
+    shake: 0, hurtFlash: 0, eid: 0, lastQuiz: null, quiz: null, cards: null, hudSig: '',
+  };
+  recompute(); G.hearts = G.stats.hp;
+  showOnly(null); $('#hud').hidden = false;
+  openDraft({ first: true });
+}
+
+function recompute() {
+  const C = G.cls;
+  const s = { dmg: 1, rate: 1, speed: 1, area: 1, pickup: 1, xp: 1 + (C.xp || 0), crit: .05, iframe: 1.0, regen: 0, hp: 5 + (C.hp || 0), proj: 0, pierce: 0 };
+  const wl = Object.assign({ brush: 1 }, C.kit);
+  for (const c of G.coll) {
+    const b = BBY[c.buff], v = buffValue(b, c.r, G.mastery[c.w.h] || 0);
+    if (b.kind === 'weapon') wl[b.weapon] = (wl[b.weapon] || 0) + v;
+    else s[b.id] += v;
+  }
+  for (const k in wl) { wl[k] = Math.min(8, wl[k]); if (!G.wt[k]) G.wt[k] = { cd: 0.3, a: 0, orbs: [] }; }
+  const oldMax = G.stats ? G.stats.hp : s.hp;
+  G.stats = s; G.wl = wl;
+  if (s.hp > oldMax) G.hearts += s.hp - oldMax;
+  G.hearts = Math.min(G.hearts, s.hp);
+}
+
+/* ---------- input ---------- */
+const keys = new Set();
+const touch = { on: false, ox: 0, oy: 0, x: 0, y: 0, id: null };
+addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  const ae = document.activeElement;
+  if (ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+  keys.add(k);
+  if (!G) {
+    if (k === 'enter' && !$('#menu').hidden) openClasses();
+    else if (!$('#classes').hidden && ['1', '2', '3'].includes(k)) newGame(CLASSES[+k - 1].id);
+    else if (k === 'escape' && !$('#classes').hidden) { showOnly('menu'); renderMenu(); }
+    return;
+  }
+  if ((k === 'escape' || k === 'p') && (G.state === 'play' || G.state === 'paused')) { togglePause(); return; }
+  if (G.state === 'draft' && ['1', '2', '3'].includes(k)) pickCard(+k - 1);
+  if (G.state === 'quiz' && G.quiz && G.quiz.done && (k === 'enter' || k === ' ') && performance.now() > G.quiz.ready) { e.preventDefault(); closeQuiz(); }
+});
+addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+addEventListener('blur', () => { keys.clear(); touch.on = false; if (G && G.state === 'play') togglePause(); });
+cv.addEventListener('pointerdown', e => {
+  if (!G || G.state !== 'play') return;
+  touch.on = true; touch.id = e.pointerId; touch.ox = touch.x = e.clientX; touch.oy = touch.y = e.clientY;
+  try { cv.setPointerCapture(e.pointerId); } catch (err) { }
+});
+cv.addEventListener('pointermove', e => { if (touch.on && e.pointerId === touch.id) { touch.x = e.clientX; touch.y = e.clientY; } });
+const endTouch = e => { if (e.pointerId === touch.id) touch.on = false; };
+cv.addEventListener('pointerup', endTouch); cv.addEventListener('pointercancel', endTouch);
+
+/* ---------- overlays ---------- */
+const OVS = ['menu', 'board', 'classes', 'draft', 'quiz', 'pause', 'over', 'scores', 'words', 'settings'];
+function showOnly(id) { for (const o of OVS) $('#' + o).hidden = o !== id; }
+let backTo = 'menu';
+function openSub(id) { backTo = $('#over').hidden ? 'menu' : 'over'; showOnly(id); }
+document.querySelectorAll('.back').forEach(b => b.onclick = () => { showOnly(backTo); if (backTo === 'menu') renderMenu(); });
+
+function resume() {
+  showOnly(null); keys.clear(); touch.on = false; G.state = 'play';
+}
+function togglePause() {
+  if (G.state === 'play') { G.state = 'paused'; renderPause(); showOnly('pause'); }
+  else if (G.state === 'paused') resume();
+}
+
+/* ================= draft ================= */
+function rollR(min) { const x = Math.random(); return Math.max(x < 0.1 ? 2 : x < 0.4 ? 1 : 0, min); }
+function pickBuff(r, used) {
+  const nW = Object.keys(G.wl).length;
+  const pool = BUFFS.filter(b => (b.min || 0) <= r && !used.has(b.id) && !(b.kind === 'weapon' && (G.wl[b.weapon] || 0) >= 8));
+  return pickW(pool, b => b.kind === 'weapon' ? (G.wl[b.weapon] ? 0.9 : nW < 5 ? 1.2 : 0.5) : 1);
+}
+function openDraft(o) {
+  const minR = o.scroll ? 1 : 0;
+  const inColl = new Set(G.coll.map(c => c.w.h));
+  let pool = G.pool.filter(w => !inColl.has(w.h)); if (pool.length < 3) pool = G.pool.slice();
+  const picks = [];
+  while (picks.length < 3) {
+    const w = pickW(pool, w => {
+      const s = Store.data.words[w.h]; if (!s || !s.d) return 3;
+      const n = s.pn + s.mn; const acc = n ? (s.pc + s.mc) / n : 0.5;
+      return 0.5 + 2.5 * (1 - acc);
+    });
+    pool = pool.filter(x => x !== w); picks.push(w);
+  }
+  const used = new Set();
+  G.cards = picks.map(w => { const r = rollR(minR); const b = pickBuff(r, used); used.add(b.id); return { w, buff: b.id, r }; });
+  $('#draftEye').textContent = o.first ? 'Your first character' : o.scroll ? 'Scroll reward · rare or better' : `Level ${G.lvl}`;
+  $('#draftTitle').textContent = o.first ? 'Choose a character to start with' : 'Choose a character';
+  $('#cards').innerHTML = G.cards.map((c, i) => {
+    const b = BBY[c.buff], s = Store.data.words[c.w.h];
+    const n = s ? s.pn + s.mn : 0;
+    const badge = !s || !s.d ? '<span class="badge new">New word</span>' : `<span class="badge">Lifetime ${n ? pct(s.pc + s.mc, n) + '%' : 'untested'}</span>`;
+    const wtxt = b.kind === 'weapon' ? (G.wl[b.weapon] ? `${b.label} +${buffValue(b, c.r, 0)} level${buffValue(b, c.r, 0) > 1 ? 's' : ''}` : `Unlock ${b.label} · level ${buffValue(b, c.r, 0)}`) : buffText(b, c.r, 0);
+    return `<div class="card-wrap"><button class="card r${c.r}b" type="button" data-i="${i}">
+      <span class="key">${i + 1}</span><span class="rar r${c.r}">${RAR[c.r].n}</span>
+      <span class="big">${c.w.h}</span><span class="py">${pyHTML(c.w)}</span><span class="en">${esc(enShow(c.w))}</span>
+      <span class="buff"><b class="r${c.r}">${esc(wtxt)}</b><small>${esc(buffSub(b))}</small></span>${badge}
+    </button><button class="hear" type="button" data-h="${c.w.h}">Hear it</button></div>`;
+  }).join('');
+  $('#cards').querySelectorAll('.card').forEach(el => el.onclick = () => pickCard(+el.dataset.i));
+  $('#cards').querySelectorAll('.hear').forEach(el => el.onclick = () => speak(el.dataset.h));
+  G.state = 'draft'; showOnly('draft');
+  G.draftReady = performance.now() + 350;
+}
+function pickCard(i) {
+  if (!G.cards || !G.cards[i] || performance.now() < G.draftReady) return;
+  const c = G.cards[i]; G.cards = null;
+  G.coll.push({ w: c.w, buff: c.buff, r: c.r });
+  if (G.mastery[c.w.h] == null) G.mastery[c.w.h] = 0;
+  wstat(c.w.h).d++;
+  recompute();
+  if (G.coll.length === 1) G.quizT = 14;
+  floatText(G.p.x, G.p.y - 30, c.w.h + ' ' + c.w.py, '#f2b84b', 1.6);
+  if (G.pendingDraft > 0) { G.pendingDraft--; openDraft({}); } else resume();
+}
+
+/* ================= quiz ================= */
+function startQuiz(kind) {
+  const pool = [...new Set(G.coll.map(c => c.w))];
+  if (!pool.length) return;
+  const cand = pool.length > 1 ? pool.filter(w => w !== G.lastQuiz) : pool;
+  const w = pickW(cand, w => {
+    const m = G.mastery[w.h] || 0, s = Store.data.words[w.h]; const n = s ? s.pn + s.mn : 0;
+    const wrong = n ? 1 - (s.pc + s.mc) / n : 0.5; return 1 + (3 - m) + 2 * wrong;
+  });
+  G.lastQuiz = w;
+  let type = Settings.mode;
+  if (type === 'mix') {
+    const s = wstat(w.h); const pa = s.pn ? s.pc / s.pn : 0, ma = s.mn ? s.mc / s.mn : 0;
+    type = Math.random() < 0.6 && pa !== ma ? (pa < ma ? 'pinyin' : 'meaning') : (Math.random() < .5 ? 'pinyin' : 'meaning');
+  }
+  G.quiz = { w, type, kind, left: Settings.qtime, done: false, ready: 0 };
+  G.state = 'quiz';
+  $('#qkind').textContent = kind === 'scroll' ? 'Scroll test · pass for a rare character' : 'Pop test';
+  $('#qhz').textContent = w.h;
+  $('#qprompt').innerHTML = type === 'pinyin'
+    ? `Type the pinyin<small>${Settings.tones ? 'Tones required: ni3hao3 or nǐhǎo' : 'Tones optional · spaces optional'}</small>`
+    : `Type the English meaning<small>Any common meaning counts</small>`;
+  $('#qask').hidden = false; $('#qres').hidden = true;
+  $('#qin').value = ''; $('#qbar').style.width = '100%';
+  showOnly('quiz');
+  setTimeout(() => $('#qin').focus(), 30);
+}
+$('#qform').addEventListener('submit', e => { e.preventDefault(); const v = $('#qin').value.trim(); if (v) answerQuiz(v); });
+$('#qskip').onclick = () => answerQuiz(null);
+$('#qcont').onclick = () => { if (G && G.quiz && performance.now() > G.quiz.ready) closeQuiz(); };
+
+function answerQuiz(inp) {
+  const q = G.quiz; if (!q || q.done) return;
+  q.done = true;
+  const w = q.w;
+  const ok = inp != null && (q.type === 'pinyin' ? checkPy(inp, w) : checkEn(inp, w));
+  const s = wstat(w.h);
+  if (q.type === 'pinyin') { s.pn++; if (ok) s.pc++; } else { s.mn++; if (ok) s.mc++; }
+  G.total++;
+  const r = G.results[w.h] || (G.results[w.h] = { c: 0, n: 0 }); r.n++;
+  const notes = [];
+  if (ok) {
+    G.correct++; r.c++; G.learned.add(w.h); G.streak++; G.bestStreak = Math.max(G.bestStreak, G.streak);
+    const m = G.mastery[w.h] || 0;
+    if (m < 3) { G.mastery[w.h] = m + 1; notes.push(`Mastery ${m + 1}/3, so its buff grows`); } else notes.push('Fully mastered');
+    G.focus = G.cls.focus || 6; G.xp += Math.ceil(G.need * 0.3 * (1 + (G.cls.quizXp || 0)));
+    notes.push(`+XP · ${G.focus}s Focus`);
+    if (G.streak % 5 === 0 && G.hearts < G.stats.hp) { G.hearts++; notes.push('Streak of 5 heals a heart'); }
+    if (q.kind === 'scroll') { G.rareDraft = true; notes.push('Rare draft unlocked'); }
+  } else {
+    G.streak = 0;
+    G.mastery[w.h] = Math.max(0, (G.mastery[w.h] || 0) - 1);
+    G.hearts--; G.shake = 10; G.hurtFlash = 0.4;
+    notes.push(G.hearts <= 0 ? 'Out of hearts' : '−1 heart · −1 mastery');
+  }
+  recompute();
+  Store.save(false);
+  if (Settings.speak) speak(w.h);
+  $('#qask').hidden = true; $('#qres').hidden = false;
+  $('#qverdict').className = 'verdict ' + (ok ? 'ok' : 'bad');
+  $('#qverdict').textContent = ok ? 'Correct' : inp == null ? (q.left <= 0 ? 'Time is up' : 'Skipped') : 'Not quite';
+  $('#qanswer').innerHTML = `<span class="py">${pyHTML(w)}</span> · ${esc(enShow(w))}`;
+  $('#qyours').textContent = inp != null && !ok ? `You wrote: ${inp}` : '';
+  $('#qnote').textContent = notes.join(' · ');
+  $('#qcont').textContent = G.hearts <= 0 ? 'See results' : 'Continue';
+  q.ready = performance.now() + (ok ? 250 : 700);
+  $('#qcont').focus();
+  if (ok) q.auto = setTimeout(() => { if (G && G.quiz === q) closeQuiz(); }, 1600);
+}
+function closeQuiz() {
+  const q = G.quiz; if (!q || !q.done) return;
+  clearTimeout(q.auto); G.quiz = null;
+  G.quizT = rand(20, 30);
+  if (G.hearts <= 0) { gameOver('A wrong answer finished you off'); return; }
+  if (G.rareDraft) { G.rareDraft = false; openDraft({ scroll: true }); return; }
+  resume();
+}
+
+/* ================= combat ================= */
+function spawnEnemy(type, opts = {}) {
+  const T = ET[type];
+  const ang = opts.ang ?? rand(0, TAU);
+  const dist = Math.hypot(W, H) / 2 / SCALE + 60;
+  const sc = 1 + G.t / 240 + (G.t / 600) ** 2;
+  const hp = T.hp * (T.boss ? 1 + G.t / 400 : sc);
+  G.en.push({
+    id: ++G.eid, t: type, x: G.p.x + Math.cos(ang) * dist, y: G.p.y + Math.sin(ang) * dist,
+    hp, maxHp: hp, r: T.r, kx: 0, ky: 0, flash: 0, orbCd: 0, fc: rand(1, 2.5), side: Math.random() < .5 ? 1 : -1,
+    sm: rand(0.9, 1.1), spin: rand(0, TAU), phase: 0, pt: 0, dead: false,
+  });
+}
+function nearestEnemy(x, y, maxD) {
+  let best = null, bd = maxD * maxD;
+  for (const e of G.en) { if (e.dead) continue; const d = (e.x - x) ** 2 + (e.y - y) ** 2; if (d < bd) { bd = d; best = e; } }
+  return best;
+}
+function hit(e, d, kx = 0, ky = 0) {
+  if (e.dead) return;
+  const crit = Math.random() < G.stats.crit;
+  if (crit) d *= 2;
+  if (G.focus > 0) d *= 1.5;
+  e.hp -= d; e.flash = 0.08;
+  const kb = ET[e.t].boss ? 0.1 : e.t === 'elite' ? 0.3 : 1;
+  e.kx += kx * kb; e.ky += ky * kb;
+  if (crit) floatText(e.x, e.y - e.r, Math.round(d), '#f2b84b', .5);
+  if (e.hp <= 0) kill(e);
+}
+function kill(e) {
+  e.dead = true; G.kills++;
+  const T = ET[e.t];
+  dropOrb(e.x, e.y, 'xp', T.xp);
+  if (e.t === 'elite' || T.boss) dropOrb(e.x + 14, e.y, 'scroll', 0);
+  if (T.boss) { dropOrb(e.x - 14, e.y, 'bun', 0); for (let i = 0; i < 10; i++) dropOrb(e.x + rand(-50, 50), e.y + rand(-50, 50), 'xp', 6); }
+  else if (Math.random() < 0.008) dropOrb(e.x, e.y + 10, 'bun', 0);
+  for (let i = 0; i < (T.boss ? 40 : 7); i++) {
+    const a = rand(0, TAU), s = rand(40, T.boss ? 320 : 160);
+    G.pt.push({ x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(.3, .7), max: .7, r: rand(2, T.boss ? 7 : 4), col: T.col });
+  }
+}
+function dropOrb(x, y, kind, v) {
+  if (kind === 'xp' && G.orbs.length > 350) {
+    const o = G.orbs.find(o => o.kind === 'xp' && !o.mag); if (o) { o.v += v; return; }
+  }
+  G.orbs.push({ x, y, kind, v, mag: false, sp: 0 });
+}
+function floatText(x, y, s, col, life = 1) { G.tx.push({ x, y, s: String(s), col, life, max: life }); }
+function hurt() {
+  if (G.inv > 0 || G.state !== 'play') return;
+  G.hearts--; G.inv = G.stats.iframe; G.shake = 12; G.hurtFlash = 0.35;
+  const P = G.p;
+  G.eb = G.eb.filter(b => (b.x - P.x) ** 2 + (b.y - P.y) ** 2 > 150 * 150);
+  if (G.hearts <= 0) gameOver('Overwhelmed');
+}
+function fireBullet(x, y, ang, spd, r = 6) {
+  spd *= 1 + G.t / 1200;
+  G.eb.push({ x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, r, life: 7 });
+}
+function ring(e, n, spd, off = 0) { for (let i = 0; i < n; i++) fireBullet(e.x, e.y, off + i * TAU / n, spd); }
+
+function updWeapons(dt) {
+  const s = G.stats, P = G.p;
+  for (const id in G.wl) {
+    const L = G.wl[id], st = G.wt[id];
+    if (id === 'orbit') {
+      st.a += dt * (2.5 + L * 0.15);
+      const n = 1 + L + s.proj, R = (58 + 6 * L) * s.area, dmg = (5 + 3 * L) * s.dmg, rr = 9 * Math.sqrt(s.area);
+      st.orbs.length = 0; st.rr = rr;
+      for (let i = 0; i < n; i++) {
+        const a = st.a + i * TAU / n, ox = P.x + Math.cos(a) * R, oy = P.y + Math.sin(a) * R;
+        st.orbs.push(ox, oy);
+        for (const e of G.en) {
+          if (e.dead || e.orbCd > 0) continue;
+          const dx = e.x - ox, dy = e.y - oy;
+          if (dx * dx + dy * dy < (e.r + rr) ** 2) { e.orbCd = 0.35; const d = Math.hypot(e.x - P.x, e.y - P.y) || 1; hit(e, dmg, (e.x - P.x) / d * 160, (e.y - P.y) / d * 160); }
+        }
+      }
+      continue;
+    }
+    st.cd -= dt;
+    if (st.cd > 0) continue;
+    if (id === 'brush') {
+      const tgt = nearestEnemy(P.x, P.y, 640); if (!tgt) continue;
+      const n = 1 + Math.floor((L - 1) / 2) + s.proj;
+      const base = Math.atan2(tgt.y - P.y, tgt.x - P.x);
+      for (let i = 0; i < n; i++) {
+        const a = base + (i - (n - 1) / 2) * 0.13;
+        G.pb.push({ x: P.x, y: P.y, vx: Math.cos(a) * 560, vy: Math.sin(a) * 560, r: 5 * Math.sqrt(s.area), dmg: (9 + 3 * L) * s.dmg, pierce: s.pierce + (L >= 4 ? 1 : 0), life: 1.3, hits: [], kind: 'brush' });
+      }
+      st.cd = Math.max(0.12, (0.62 - 0.03 * L) / s.rate);
+    } else if (id === 'fan') {
+      const n = 3 + L + s.proj, base = Math.atan2(P.fy, P.fx), spread = 0.95;
+      for (let i = 0; i < n; i++) {
+        const a = base + (n > 1 ? (i / (n - 1) - .5) * spread : 0);
+        G.pb.push({ x: P.x, y: P.y, vx: Math.cos(a) * 480, vy: Math.sin(a) * 480, r: 6 * Math.sqrt(s.area), dmg: (5 + 2.2 * L) * s.dmg, pierce: s.pierce + 1, life: 0.42, hits: [], kind: 'fan' });
+      }
+      st.cd = (1.25 - 0.05 * L) / s.rate;
+    } else if (id === 'nova') {
+      const R = (85 + 14 * L) * s.area, dmg = (16 + 8 * L) * s.dmg;
+      for (const e of G.en) { const dx = e.x - P.x, dy = e.y - P.y, d = Math.hypot(dx, dy) || 1; if (d < R + e.r) hit(e, dmg, dx / d * 260, dy / d * 260); }
+      G.fx.push({ type: 'ring', x: P.x, y: P.y, R, life: .35, max: .35, col: '255,90,78' });
+      st.cd = (3.4 - 0.18 * L) / s.rate;
+    } else if (id === 'thunder') {
+      const n = 1 + Math.floor(L / 2) + s.proj, R = 40 * s.area, dmg = (22 + 11 * L) * s.dmg;
+      const near = G.en.filter(e => !e.dead && Math.abs(e.x - P.x) < W / 2 / SCALE && Math.abs(e.y - P.y) < H / 2 / SCALE);
+      if (!near.length) continue;
+      for (let i = 0; i < n && near.length; i++) {
+        const e = near.splice(Math.floor(Math.random() * near.length), 1)[0];
+        const x = e.x, y = e.y;
+        for (const o of G.en) if ((o.x - x) ** 2 + (o.y - y) ** 2 < (R + o.r) ** 2) hit(o, dmg);
+        G.fx.push({ type: 'bolt', x, y, life: .22, max: .22, R });
+      }
+      st.cd = (2.3 - 0.12 * L) / s.rate;
+    } else if (id === 'seal') {
+      if (G.seals.length < 3 + L) G.seals.push({ x: P.x, y: P.y, life: 10, arm: 0.5, R: (70 + 10 * L) * s.area, dmg: (35 + 15 * L) * s.dmg });
+      st.cd = (2.8 - 0.15 * L) / s.rate;
+    }
+  }
+}
+
+function update(dt) {
+  const P = G.p, s = G.stats;
+  G.t += dt;
+  // movement
+  let mx = 0, my = 0;
+  if (keys.has('a') || keys.has('arrowleft')) mx--;
+  if (keys.has('d') || keys.has('arrowright')) mx++;
+  if (keys.has('w') || keys.has('arrowup')) my--;
+  if (keys.has('s') || keys.has('arrowdown')) my++;
+  let mag = Math.hypot(mx, my);
+  if (touch.on) {
+    const dx = touch.x - touch.ox, dy = touch.y - touch.oy, d = Math.hypot(dx, dy);
+    if (d > 6) { mx = dx / d; my = dy / d; mag = Math.min(1, d / 50); }
+  } else if (mag) { mx /= mag; my /= mag; mag = 1; }
+  if (mag) { P.x += mx * 195 * s.speed * mag * dt; P.y += my * 195 * s.speed * mag * dt; P.fx = mx; P.fy = my; }
+
+  G.inv -= dt; G.focus -= dt; G.shake = Math.max(0, G.shake - 40 * dt); G.hurtFlash -= dt;
+  // regen
+  if (s.regen > 0) {
+    if (G.hearts < s.hp) { G.regenAcc += s.regen / 60 * dt; if (G.regenAcc >= 1) { G.regenAcc -= 1; G.hearts++; floatText(P.x, P.y - 24, '+1 ♥', '#ff5a4e'); } }
+    else G.regenAcc = 0;
+  }
+
+  // spawning
+  const boss = G.en.find(e => ET[e.t].boss && !e.dead);
+  G.spawnT -= dt;
+  if (G.spawnT <= 0 && G.en.length < 280) {
+    const t = G.t;
+    G.spawnT = Math.max(0.35, 1.3 - t * 0.0022) * (boss ? 2 : 1);
+    const n = 1 + Math.floor(t / 150);
+    for (let i = 0; i < n; i++) {
+      const type = pickW(['mote', 'runner', 'caster', 'brute', 'spinner'], k => ({
+        mote: 10, runner: t > 50 ? 6 : 0, caster: t > 90 ? 4 : 0, brute: t > 140 ? 3 : 0, spinner: t > 200 ? 2.5 : 0
+      })[k]);
+      spawnEnemy(type);
+    }
+  }
+  G.eliteT -= dt;
+  if (G.eliteT <= 0) { G.eliteT = 90; spawnEnemy('elite'); floatText(P.x, P.y - 60, 'An elite approaches', '#f2c94c', 2); }
+  if (G.t >= G.bossAt) { G.bossAt += 300; spawnEnemy('nian'); floatText(P.x, P.y - 60, '年兽 Nian awakens', '#ff5a3c', 2.5); }
+
+  updWeapons(dt);
+
+  // player bullets
+  for (const b of G.pb) {
+    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    if (b.life <= 0) continue;
+    for (const e of G.en) {
+      if (e.dead || b.hits.includes(e.id)) continue;
+      const dx = e.x - b.x, dy = e.y - b.y;
+      if (dx * dx + dy * dy < (e.r + b.r) ** 2) {
+        const sp = Math.hypot(b.vx, b.vy) || 1;
+        hit(e, b.dmg, b.vx / sp * 90, b.vy / sp * 90); b.hits.push(e.id);
+        if (b.pierce-- <= 0) { b.life = 0; break; }
+      }
+    }
+  }
+  G.pb = G.pb.filter(b => b.life > 0);
+
+  // seals
+  for (const m of G.seals) {
+    m.life -= dt; m.arm -= dt;
+    if (m.arm > 0 || m.life <= 0) continue;
+    if (G.en.some(e => !e.dead && (e.x - m.x) ** 2 + (e.y - m.y) ** 2 < (24 + e.r) ** 2)) {
+      for (const e of G.en) { const dx = e.x - m.x, dy = e.y - m.y, d = Math.hypot(dx, dy) || 1; if (d < m.R + e.r) hit(e, m.dmg, dx / d * 220, dy / d * 220); }
+      G.fx.push({ type: 'ring', x: m.x, y: m.y, R: m.R, life: .4, max: .4, col: '242,184,75' });
+      m.life = 0;
+    }
+  }
+  G.seals = G.seals.filter(m => m.life > 0);
+
+  // enemies
+  const decay = Math.max(0, 1 - 8 * dt);
+  for (const e of G.en) {
+    if (e.dead) continue;
+    const T = ET[e.t];
+    let dx = P.x - e.x, dy = P.y - e.y; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+    let mvx = dx, mvy = dy;
+    if (T.ranged) { if (d < 190) { mvx = -dx; mvy = -dy; } else if (d < 270) { mvx = -dy * e.side; mvy = dx * e.side; } }
+    const sp = T.spd * e.sm;
+    e.x += (mvx * sp + e.kx) * dt; e.y += (mvy * sp + e.ky) * dt;
+    e.kx *= decay; e.ky *= decay; e.orbCd -= dt; e.flash -= dt;
+    e.fc -= dt;
+    if (e.fc <= 0) {
+      const aim = Math.atan2(P.y - e.y, P.x - e.x);
+      if (e.t === 'caster') { if (d < 620) for (let i = -1; i <= 1; i++) fireBullet(e.x, e.y, aim + i * 0.24, 170); e.fc = 2.6; }
+      else if (e.t === 'spinner') { ring(e, 10, 130, e.spin); e.spin += 0.3; e.fc = 3.2; }
+      else if (e.t === 'elite') { ring(e, 14, 150, e.spin); e.spin += 0.2; e.fc = 3.4; }
+      else if (e.t === 'nian') {
+        if (e.phase === 0) { fireBullet(e.x, e.y, e.spin, 150); fireBullet(e.x, e.y, e.spin + Math.PI, 150); e.spin += 0.23; e.fc = 0.09; }
+        else if (e.phase === 1) { for (let i = -2; i <= 2; i++) fireBullet(e.x, e.y, aim + i * 0.18, 210); e.fc = 0.75; }
+        else { ring(e, 22, 140, e.spin); e.spin += 0.14; e.fc = 1.0; }
+      } else e.fc = 99;
+    }
+    if (T.boss) { e.pt += dt; if (e.pt > 5) { e.pt = 0; e.phase = (e.phase + 1) % 3; } }
+    if (d < e.r + 11) { hurt(); e.kx = -dx * 280; e.ky = -dy * 280; }
+    if (d > 1500 && !T.boss) {
+      const a = rand(0, TAU), dist = Math.hypot(W, H) / 2 / SCALE + 60;
+      e.x = P.x + Math.cos(a) * dist; e.y = P.y + Math.sin(a) * dist;
+    }
+  }
+  // separation via a coarse grid
+  const grid = new Map(), C = 44;
+  for (const e of G.en) {
+    if (e.dead) continue;
+    const k = Math.floor(e.x / C) * 73856 + Math.floor(e.y / C);
+    let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(e);
+  }
+  for (const e of G.en) {
+    if (e.dead) continue;
+    const cx = Math.floor(e.x / C), cy = Math.floor(e.y / C);
+    for (let ix = -1; ix <= 1; ix++) for (let iy = -1; iy <= 1; iy++) {
+      const a = grid.get((cx + ix) * 73856 + cy + iy); if (!a) continue;
+      for (const o of a) {
+        if (o === e) continue;
+        const dx = e.x - o.x, dy = e.y - o.y, rr = e.r + o.r, d2 = dx * dx + dy * dy;
+        if (d2 < rr * rr && d2 > 0.01) { const d = Math.sqrt(d2), push = (rr - d) * 0.5 * Math.min(1, dt * 12); e.x += dx / d * push; e.y += dy / d * push; }
+      }
+    }
+  }
+  G.en = G.en.filter(e => !e.dead);
+
+  // enemy bullets
+  for (const b of G.eb) {
+    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    const dx = b.x - P.x, dy = b.y - P.y;
+    if (dx * dx + dy * dy < (b.r + 5) ** 2) { b.life = 0; hurt(); }
+    if (dx * dx + dy * dy > 1400 * 1400) b.life = 0;
+  }
+  G.eb = G.eb.filter(b => b.life > 0);
+
+  // pickups
+  const PR = 70 * s.pickup;
+  for (const o of G.orbs) {
+    const dx = P.x - o.x, dy = P.y - o.y, d = Math.hypot(dx, dy) || 1;
+    if (!o.mag && d < (o.kind === 'xp' ? PR : 40)) o.mag = true;
+    if (o.mag) { o.sp = Math.min(900, o.sp + 1400 * dt); o.x += dx / d * o.sp * dt; o.y += dy / d * o.sp * dt; }
+    if (d < 16) {
+      o.dead = true;
+      if (o.kind === 'xp') G.xp += o.v * s.xp;
+      else if (o.kind === 'bun') { if (G.hearts < s.hp) G.hearts++; floatText(P.x, P.y - 24, '包子 +1 ♥', '#efe6d2'); }
+      else if (o.kind === 'scroll') G.pendingScroll = (G.pendingScroll || 0) + 1;
+    }
+  }
+  G.orbs = G.orbs.filter(o => !o.dead);
+
+  // particles & fx
+  for (const p of G.pt) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.92; p.vy *= 0.92; p.life -= dt; }
+  G.pt = G.pt.filter(p => p.life > 0); if (G.pt.length > 600) G.pt.splice(0, G.pt.length - 600);
+  for (const f of G.fx) f.life -= dt; G.fx = G.fx.filter(f => f.life > 0);
+  for (const t of G.tx) { t.life -= dt; t.y -= 30 * dt; } G.tx = G.tx.filter(t => t.life > 0);
+
+  if (G.state !== 'play') return; // died this frame
+
+  // level ups → drafts, scrolls → tests, timer → tests
+  while (G.xp >= G.need) { G.xp -= G.need; G.lvl++; G.need = xpNeed(G.lvl); G.pendingDraft++; }
+  if (G.pendingDraft > 0) { G.pendingDraft--; openDraft({}); return; }
+  if (G.pendingScroll > 0 && G.coll.length) { G.pendingScroll--; startQuiz('scroll'); return; }
+  if (G.coll.length) { G.quizT -= dt; if (G.quizT <= 0) startQuiz('timed'); }
+}
+
+/* ================= drawing ================= */
+const menuGlyphs = Array.from({ length: 26 }, () => ({ h: WORDS[Math.floor(Math.random() * WORDS.length)].h[0], x: Math.random(), y: Math.random(), s: rand(28, 90), v: rand(6, 22), a: rand(.04, .13) }));
+let menuT = 0;
+function drawGrid(cx, cy, hw, hh, cell) {
+  const x0 = Math.floor((cx - hw) / cell) * cell, x1 = cx + hw, y0 = Math.floor((cy - hh) / cell) * cell, y1 = cy + hh;
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = 'rgba(242,184,75,0.085)'; ctx.setLineDash([]);
+  ctx.beginPath();
+  for (let x = x0; x <= x1; x += cell) { ctx.moveTo(x, y0); ctx.lineTo(x, y1 + cell); }
+  for (let y = y0; y <= y1; y += cell) { ctx.moveTo(x0, y); ctx.lineTo(x1 + cell, y); }
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,90,78,0.05)'; ctx.setLineDash([5, 7]); ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = x0; x <= x1; x += cell) for (let y = y0; y <= y1; y += cell) {
+    ctx.moveTo(x + cell / 2, y); ctx.lineTo(x + cell / 2, y + cell);
+    ctx.moveTo(x, y + cell / 2); ctx.lineTo(x + cell, y + cell / 2);
+    ctx.moveTo(x, y); ctx.lineTo(x + cell, y + cell);
+    ctx.moveTo(x + cell, y); ctx.lineTo(x, y + cell);
+  }
+  ctx.stroke(); ctx.setLineDash([]);
+}
+function drawMenu(dt) {
+  menuT += dt;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.save(); ctx.translate(-((menuT * 8) % 140), -((menuT * 5) % 140));
+  drawGrid(W / 2, H / 2, W / 2 + 280, H / 2 + 280, 140); ctx.restore();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const g of menuGlyphs) {
+    g.y -= g.v * dt / H; if (g.y < -0.1) { g.y = 1.1; g.x = Math.random(); }
+    ctx.font = `700 ${g.s}px "Noto Serif SC", serif`;
+    ctx.fillStyle = `rgba(239,230,210,${g.a})`;
+    ctx.fillText(g.h, g.x * W, g.y * H);
+  }
+  const grd = ctx.createRadialGradient(W / 2, H / 2, 50, W / 2, H / 2, Math.max(W, H) * .7);
+  grd.addColorStop(0, 'rgba(18,15,34,0)'); grd.addColorStop(1, 'rgba(8,6,16,.75)');
+  ctx.fillStyle = grd; ctx.fillRect(0, 0, W, H);
+}
+function draw(dt) {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#120f22'; ctx.fillRect(0, 0, W, H);
+  if (!G) { drawMenu(dt); return; }
+  const P = G.p, k = SCALE;
+  const sx = G.shake ? rand(-1, 1) * G.shake : 0, sy = G.shake ? rand(-1, 1) * G.shake : 0;
+  ctx.setTransform(DPR * k, 0, 0, DPR * k, DPR * (W / 2 - P.x * k + sx), DPR * (H / 2 - P.y * k + sy));
+  const hw = W / 2 / k + 20, hh = H / 2 / k + 20;
+  drawGrid(P.x, P.y, hw, hh, 120);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const vis = (x, y, r) => Math.abs(x - P.x) < hw + r && Math.abs(y - P.y) < hh + r;
+
+  // seals
+  for (const m of G.seals) {
+    if (!vis(m.x, m.y, 30)) continue;
+    const armed = m.arm <= 0;
+    ctx.globalAlpha = m.life < 1.5 ? 0.4 + 0.6 * Math.abs(Math.sin(m.life * 10)) : 1;
+    ctx.fillStyle = armed ? '#b8322a' : '#6a2a2a'; ctx.fillRect(m.x - 13, m.y - 13, 26, 26);
+    ctx.strokeStyle = '#ff8a7a'; ctx.lineWidth = 1.5; ctx.strokeRect(m.x - 10, m.y - 10, 20, 20);
+    ctx.fillStyle = '#ffd9cf'; ctx.font = '700 15px "Noto Serif SC", serif'; ctx.fillText('印', m.x, m.y + 1);
+    ctx.globalAlpha = 1;
+  }
+  // pickups
+  for (const o of G.orbs) {
+    if (!vis(o.x, o.y, 20)) continue;
+    if (o.kind === 'xp') {
+      const r = 4 + Math.min(6, Math.sqrt(o.v) * 1.6);
+      ctx.fillStyle = '#4fd1a5'; ctx.beginPath(); ctx.moveTo(o.x, o.y - r); ctx.lineTo(o.x + r * .7, o.y); ctx.lineTo(o.x, o.y + r); ctx.lineTo(o.x - r * .7, o.y); ctx.fill();
+    } else if (o.kind === 'bun') {
+      ctx.fillStyle = '#f4ecdc'; ctx.beginPath(); ctx.arc(o.x, o.y, 10, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#c9b89a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(o.x, o.y - 2, 4, 0.2, Math.PI - 0.2); ctx.stroke();
+    } else {
+      const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 160);
+      ctx.fillStyle = `rgba(242,184,75,${0.25 * pulse})`; ctx.beginPath(); ctx.arc(o.x, o.y, 22, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#f2b84b'; ctx.fillRect(o.x - 9, o.y - 12, 18, 24);
+      ctx.fillStyle = '#3a2a08'; ctx.font = '700 13px "Noto Serif SC", serif'; ctx.fillText('卷', o.x, o.y + 1);
+    }
+  }
+  // enemies
+  for (const e of G.en) {
+    if (!vis(e.x, e.y, e.r + 10)) continue;
+    const T = ET[e.t];
+    if (T.glyph) {
+      ctx.fillStyle = T.boss ? 'rgba(255,90,60,.18)' : 'rgba(242,201,76,.16)';
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 10 + Math.sin(performance.now() / 200) * 3, 0, TAU); ctx.fill();
+    }
+    ctx.fillStyle = e.flash > 0 ? '#ffffff' : T.col;
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(18,15,34,.55)'; ctx.beginPath(); ctx.arc(e.x, e.y + e.r * .25, e.r * .72, 0, TAU); ctx.fill();
+    if (T.glyph) {
+      ctx.fillStyle = e.flash > 0 ? '#120f22' : '#fff4dc'; ctx.font = `900 ${Math.round(e.r * 1.05)}px "Noto Serif SC", serif`;
+      ctx.fillText(T.glyph, e.x, e.y + e.r * .12);
+    } else {
+      const a = Math.atan2(P.y - e.y, P.x - e.x), ex = Math.cos(a) * e.r * .3, ey = Math.sin(a) * e.r * .3;
+      ctx.fillStyle = '#fff4dc';
+      ctx.beginPath(); ctx.arc(e.x + ex - e.r * .3, e.y + ey - e.r * .1, Math.max(1.6, e.r * .16), 0, TAU); ctx.arc(e.x + ex + e.r * .3, e.y + ey - e.r * .1, Math.max(1.6, e.r * .16), 0, TAU); ctx.fill();
+    }
+  }
+  // orbit drops
+  const ow = G.wt.orbit;
+  if (ow && G.wl.orbit) {
+    for (let i = 0; i < ow.orbs.length; i += 2) {
+      ctx.fillStyle = 'rgba(79,209,165,.25)'; ctx.beginPath(); ctx.arc(ow.orbs[i], ow.orbs[i + 1], ow.rr + 5, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#efe6d2'; ctx.beginPath(); ctx.arc(ow.orbs[i], ow.orbs[i + 1], ow.rr, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#120f22'; ctx.beginPath(); ctx.arc(ow.orbs[i], ow.orbs[i + 1], ow.rr * .45, 0, TAU); ctx.fill();
+    }
+  }
+  // player bullets
+  for (const b of G.pb) {
+    ctx.fillStyle = b.kind === 'fan' ? 'rgba(239,230,210,.9)' : 'rgba(242,184,75,.3)';
+    if (b.kind === 'fan') {
+      const a = Math.atan2(b.vy, b.vx);
+      ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(a); ctx.beginPath(); ctx.ellipse(0, 0, b.r * 1.6, b.r * .55, 0, 0, TAU); ctx.fill(); ctx.restore();
+    } else {
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 2, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#f2b84b'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
+    }
+  }
+  // player
+  const blink = G.inv > 0 && Math.floor(G.inv * 14) % 2 === 0;
+  if (!blink) {
+    const fa = Math.atan2(P.fy, P.fx);
+    if (G.focus > 0) { ctx.strokeStyle = 'rgba(79,209,165,.55)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(P.x, P.y, 22 + Math.sin(performance.now() / 120) * 2, 0, TAU); ctx.stroke(); }
+    ctx.fillStyle = 'rgba(79,209,165,.22)'; ctx.beginPath(); ctx.arc(P.x, P.y, 18, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#4fd1a5'; ctx.beginPath(); ctx.arc(P.x, P.y, 12, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#1b5c4a'; ctx.beginPath(); ctx.moveTo(P.x + Math.cos(fa) * 19, P.y + Math.sin(fa) * 19);
+    ctx.lineTo(P.x + Math.cos(fa + 2.5) * 9, P.y + Math.sin(fa + 2.5) * 9); ctx.lineTo(P.x + Math.cos(fa - 2.5) * 9, P.y + Math.sin(fa - 2.5) * 9); ctx.fill();
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(P.x, P.y, 4, 0, TAU); ctx.fill();
+  }
+  // enemy bullets on top for readability
+  for (const b of G.eb) {
+    if (!vis(b.x, b.y, 10)) continue;
+    ctx.fillStyle = 'rgba(255,79,123,.35)'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 3, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#ff4f7b'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#fff0f4'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r * .45, 0, TAU); ctx.fill();
+  }
+  // particles
+  for (const p of G.pt) { ctx.globalAlpha = Math.max(0, p.life / p.max); ctx.fillStyle = p.col; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill(); }
+  ctx.globalAlpha = 1;
+  // fx
+  for (const f of G.fx) {
+    const t = 1 - f.life / f.max;
+    if (f.type === 'ring') {
+      ctx.strokeStyle = `rgba(${f.col},${1 - t})`; ctx.lineWidth = 6 * (1 - t) + 1;
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.R * (0.3 + 0.7 * t), 0, TAU); ctx.stroke();
+    } else if (f.type === 'bolt') {
+      ctx.strokeStyle = `rgba(190,215,255,${1 - t})`; ctx.lineWidth = 3;
+      ctx.beginPath(); let y = f.y - 420, x = f.x + rand(-30, 30); ctx.moveTo(x, y);
+      while (y < f.y) { y += rand(30, 60); x = f.x + rand(-18, 18) * (f.y - y) / 200; ctx.lineTo(x, Math.min(y, f.y)); }
+      ctx.stroke();
+      ctx.fillStyle = `rgba(190,215,255,${0.35 * (1 - t)})`; ctx.beginPath(); ctx.arc(f.x, f.y, f.R, 0, TAU); ctx.fill();
+    }
+  }
+  // floating text
+  for (const t of G.tx) {
+    ctx.globalAlpha = Math.min(1, t.life / t.max * 2); ctx.fillStyle = t.col;
+    ctx.font = `700 ${/[一-鿿]/.test(t.s) ? 20 : 16}px "Noto Serif SC","Barlow Semi Condensed",sans-serif`;
+    ctx.fillText(t.s, t.x, t.y);
+  }
+  ctx.globalAlpha = 1;
+  // screen-space: hurt flash and touch stick
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (G.hurtFlash > 0) {
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .3, W / 2, H / 2, Math.max(W, H) * .7);
+    g.addColorStop(0, 'rgba(255,90,78,0)'); g.addColorStop(1, `rgba(255,90,78,${G.hurtFlash})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  if (touch.on && G.state === 'play') {
+    ctx.strokeStyle = 'rgba(239,230,210,.25)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(touch.ox, touch.oy, 50, 0, TAU); ctx.stroke();
+    const dx = touch.x - touch.ox, dy = touch.y - touch.oy, d = Math.hypot(dx, dy), c = Math.min(1, 50 / (d || 1));
+    ctx.fillStyle = 'rgba(239,230,210,.3)'; ctx.beginPath(); ctx.arc(touch.ox + dx * c, touch.oy + dy * c, 20, 0, TAU); ctx.fill();
+  }
+}
+
+/* ================= HUD ================= */
+function updHud() {
+  $('#xpfill').style.width = (100 * clamp(G.xp / G.need, 0, 1)) + '%';
+  $('#clock').textContent = fmtTime(G.t);
+  const sig = [G.hearts, G.stats.hp, G.lvl, G.kills, G.streak, G.coll.map(c => c.w.h + (G.mastery[c.w.h] || 0)).join('')].join('|');
+  if (sig !== G.hudSig) {
+    G.hudSig = sig;
+    $('#hearts').innerHTML = Array.from({ length: G.stats.hp }, (_, i) => `<span class="${i < G.hearts ? '' : 'empty'}">♥</span>`).join('');
+    $('#lvl').textContent = `Level ${G.lvl}`;
+    $('#kills').textContent = `${G.kills} defeated`;
+    const seen = new Set();
+    $('#coll').innerHTML = G.coll.filter(c => !seen.has(c.w.h) && seen.add(c.w.h)).map(c => {
+      const m = G.mastery[c.w.h] || 0;
+      return `<div class="cchip"><span class="hz">${c.w.h}</span><span class="pips">${[0, 1, 2].map(i => `<i class="${i < m ? 'on' : ''}"></i>`).join('')}</span></div>`;
+    }).join('');
+    const sc = $('#streakChip'); sc.hidden = G.streak < 2; sc.textContent = `Streak ${G.streak} · ${5 - G.streak % 5} to a heart`;
+  }
+  const tc = $('#testChip');
+  tc.hidden = !G.coll.length;
+  if (G.coll.length) { const s = Math.max(0, Math.ceil(G.quizT)); $('#testT').textContent = s; tc.classList.toggle('soon', s <= 3); }
+  $('#focusChip').hidden = !(G.focus > 0);
+  const boss = G.en.find(e => ET[e.t].boss);
+  $('#bossbar').hidden = !boss;
+  if (boss) $('#bossfill').style.width = (100 * clamp(boss.hp / boss.maxHp, 0, 1)) + '%';
+}
+
+/* ================= pause & game over ================= */
+function buildList(entries) {
+  return entries.map(({ c, m }) => {
+    const b = BBY[c.buff];
+    return `<div class="li"><span class="hz">${c.w.h}</span><span class="meta">${pyHTML(c.w)} · ${esc(enShow(c.w))}<small class="r${c.r}">${RAR[c.r].n}: ${esc(buffText(b, c.r, m))}</small></span><span class="pips">${[0, 1, 2].map(i => `<i class="${i < m ? 'on' : ''}"></i>`).join('')}</span></div>`;
+  }).join('');
+}
+function renderPause() {
+  $('#pauseEye').textContent = `Paused · ${G.cls.zh} ${G.cls.name}`;
+  $('#pauseColl').innerHTML = G.coll.length ? buildList(G.coll.map(c => ({ c, m: G.mastery[c.w.h] || 0 }))) : '<p class="empty-note">No characters yet.</p>';
+  const s = G.stats;
+  const rows = [
+    ...Object.entries(G.wl).map(([id, L]) => [`${WBYID[id].zh} ${WBYID[id].name}`, `Level ${L}`]),
+    ['Damage', `${Math.round(s.dmg * 100)}%`], ['Attack speed', `${Math.round(s.rate * 100)}%`], ['Move speed', `${Math.round(s.speed * 100)}%`],
+    ['Area', `${Math.round(s.area * 100)}%`], ['Crit chance', `${Math.round(s.crit * 100)}%`], ['Projectiles', `+${s.proj}`], ['Pierce', `+${s.pierce}`],
+    ['Pickup range', `${Math.round(s.pickup * 100)}%`], ['XP gain', `${Math.round(s.xp * 100)}%`], ['Invulnerability', `${s.iframe.toFixed(2)}s`],
+  ];
+  $('#pauseBuild').innerHTML = rows.map(([a, b]) => `<div class="li" style="grid-template-columns:1fr auto"><span class="meta">${esc(a)}</span><span class="res">${esc(b)}</span></div>`).join('');
+}
+function gameOver(reason) {
+  G.state = 'over'; G.quiz = null;
+  const rec = {
+    date: new Date().toISOString(), cls: G.cls.id, learned: G.learned.size, collected: new Set(G.coll.map(c => c.w.h)).size,
+    correct: G.correct, total: G.total, time: Math.round(G.t), level: G.lvl, kills: G.kills, streak: G.bestStreak,
+    words: [...new Set(G.coll.map(c => c.w.h))],
+  };
+  const sc = Store.data.scores; sc.push(rec);
+  sc.sort((a, b) => b.learned - a.learned || b.time - a.time);
+  Store.data.scores = sc.slice(0, 25);
+  const rank = Store.data.scores.indexOf(rec);
+  Store.save(true);
+  $('#overEye').textContent = rank === 0 ? 'New best run' : rank > 0 ? `Run over · ranked #${rank + 1}` : 'Run over';
+  $('#overTitle').textContent = `${reason} at ${fmtTime(G.t)}`;
+  const stat = (v, l, hl) => `<div class="stat${hl ? ' hl' : ''}"><b>${v}</b><span>${l}</span></div>`;
+  $('#overStats').innerHTML = stat(rec.learned, 'Words learned', 1) + stat(rec.collected, 'Collected') +
+    stat(rec.total ? pct(rec.correct, rec.total) + '%' : '–', `Accuracy ${rec.correct}/${rec.total}`) + stat(fmtTime(rec.time), 'Survived') +
+    stat(rec.level, 'Level') + stat(rec.kills, 'Defeated') + stat(rec.streak, 'Best streak');
+  const seen = new Set();
+  const uniq = G.coll.filter(c => !seen.has(c.w.h) && seen.add(c.w.h));
+  $('#overWords').innerHTML = uniq.length ? uniq.map(c => {
+    const r = G.results[c.w.h];
+    const res = !r ? '<span class="muted">Not tested</span>' : `<span class="${r.c === r.n ? 'ok' : r.c ? 'mid' : 'bad'}">${r.c}/${r.n} right</span>`;
+    return `<div class="li"><span class="hz">${c.w.h}</span><span class="meta">${pyHTML(c.w)} · ${esc(enShow(c.w))}</span><span class="res">${res}</span></div>`;
+  }).join('') : '<p class="empty-note">No characters collected.</p>';
+  $('#hud').hidden = true;
+  showOnly('over');
+  renderOverOnline(rec);
+}
+
+function renderOverOnline(rec) {
+  const box = $('#overOnline');
+  box.hidden = !Online.on; if (!Online.on) return;
+  const row = () => ({ player_id: Online.id, nickname: Online.name, cls: rec.cls, learned: rec.learned, collected: rec.collected,
+    correct: rec.correct, total: rec.total, time_s: rec.time, level: rec.level, kills: rec.kills });
+  const post = async () => {
+    box.innerHTML = `<span>Posting to the global leaderboard as <b>${esc(Online.name)}</b>…</span>`;
+    const r = await Online.submit(row());
+    if (r.ok) box.innerHTML = `<span>Posted to the global leaderboard as <b>${esc(Online.name)}</b>.</span><button class="btn ghost" type="button" id="overBoard">View leaderboard</button>`;
+    else if (r.error) box.innerHTML = `<span>The leaderboard turned this run down: ${esc(r.error)}</span>`;
+    else box.innerHTML = `<span>Couldn't reach the leaderboard. This run will post the next time you open the game.</span>`;
+    const b = $('#overBoard'); if (b) b.onclick = () => openBoard(rec.cls);
+  };
+  if (Online.name) { post(); return; }
+  box.innerHTML = `<label for="overName">Post this run to the global leaderboard<small>Pick a name other players will see</small></label>
+    <form id="overNameForm" autocomplete="off"><input class="field" id="overName" type="text" maxlength="20" placeholder="Your name" spellcheck="false"><button class="btn" type="submit">Post</button></form>`;
+  $('#overNameForm').onsubmit = e => {
+    e.preventDefault(); const n = cleanName($('#overName').value);
+    if (!n) { $('#overName').focus(); return; }
+    Online.name = n; post();
+  };
+}
+
+let boardPeriod = 'day', boardCls = 'student', boardReq = 0;
+function periodStart(p) {
+  const d = new Date();
+  if (p === 'all') return '1970-01-01T00:00:00Z';
+  const t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return new Date(p === 'day' ? t : t - ((d.getUTCDay() + 6) % 7) * 86400000).toISOString();
+}
+function paintSeg(id, v) { $(id).querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v))); }
+function openBoard(cls) {
+  openSub('board');
+  boardCls = cls || Settings.cls || 'student';
+  $('#nameIn').value = Online.name;
+  loadBoard();
+}
+async function loadBoard() {
+  paintSeg('#bPeriod', boardPeriod); paintSeg('#bClass', boardCls);
+  $('#bNote').textContent = `Each player's best ${CBY[boardCls].name} run, ranked by words learned, then survival time. ` +
+    (boardPeriod === 'day' ? 'Resets at 00:00 UTC.' : boardPeriod === 'week' ? 'Resets Monday 00:00 UTC.' : 'Since launch.');
+  const tbl = $('#boardTable'), my = ++boardReq;
+  tbl.innerHTML = '<p class="empty-note">Loading…</p>';
+  try {
+    const rows = await Online.board(boardCls, periodStart(boardPeriod));
+    if (my !== boardReq) return;
+    const me = Online.id;
+    tbl.innerHTML = rows.length ? `<table><thead><tr><th>#</th><th>Player</th><th>Learned</th><th>Accuracy</th><th>Survived</th><th>Level</th><th>Date</th></tr></thead><tbody>${rows.map((r, i) => `<tr class="${r.player_id === me ? 'me' : ''}">
+      <td>${i + 1}</td><td>${esc(r.nickname)}${r.player_id === me ? ' <span class="muted">(you)</span>' : ''}</td><td><b class="mid">${r.learned}</b></td>
+      <td>${accChip(r.correct, r.total)}</td><td>${fmtTime(r.time_s)}</td><td>${r.level}</td><td>${new Date(r.created_at).toLocaleDateString()}</td></tr>`).join('')}</tbody></table>`
+      : `<p class="empty-note">No ${CBY[boardCls].name} runs posted ${boardPeriod === 'day' ? 'today' : boardPeriod === 'week' ? 'this week' : 'yet'}. Finish a run to take first place.</p>`;
+  } catch (e) {
+    if (my !== boardReq) return;
+    tbl.innerHTML = `<p class="empty-note">Couldn't load the leaderboard (${esc(e.message || 'network error')}). Check your connection and try again.</p>`;
+  }
+}
+$('#bPeriod').querySelectorAll('button').forEach(b => b.onclick = () => { boardPeriod = b.dataset.v; loadBoard(); });
+$('#bClass').querySelectorAll('button').forEach(b => b.onclick = () => { boardCls = b.dataset.v; loadBoard(); });
+$('#nameForm').onsubmit = e => {
+  e.preventDefault(); const n = cleanName($('#nameIn').value);
+  if (!n) { $('#nameIn').focus(); return; }
+  Online.name = n; $('#nameIn').value = n; $('#nameIn').blur();
+};
+$('#boardBtn').onclick = () => openBoard();
+
+function saveMsg(html) { const m = $('#saveMsg'); m.hidden = false; m.innerHTML = html; }
+$('#exportBtn').onclick = () => {
+  const blob = new Blob([JSON.stringify({ app: 'hanzi-survivor', version: 1, exported: new Date().toISOString(),
+    player_id: Online.id, name: Online.name, data: Store.data }, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `hanzi-survivor-save-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  saveMsg('Save exported. Import that file on your other browser.');
+};
+$('#importLbl').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#importFile').click(); } };
+$('#importFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  let j;
+  try { j = JSON.parse(await f.text()); } catch (err) { saveMsg('That file isn\'t a Hanzi Survivor save. Choose the .json file you exported.'); return; }
+  if (!j || j.app !== 'hanzi-survivor' || !j.data || !Array.isArray(j.data.scores) || typeof j.data.words !== 'object') {
+    saveMsg('That file isn\'t a Hanzi Survivor save. Choose the .json file you exported.'); return;
+  }
+  const words = Object.values(j.data.words).filter(w => w && w.d).length;
+  saveMsg(`This file has ${j.data.scores.length} runs and ${words} words met. Importing replaces this browser's save. <button class="btn" type="button" id="importGo">Replace my save</button> <button class="btn ghost" type="button" id="importNo">Cancel</button>`);
+  $('#importNo').onclick = () => { $('#saveMsg').hidden = true; };
+  $('#importGo').onclick = () => {
+    Store.data = { scores: j.data.scores.slice(0, 25), words: j.data.words };
+    Store.save(false);
+    if (j.player_id) lsSet(KEY + '-player', String(j.player_id));
+    if (j.name) Online.name = j.name;
+    renderMenu();
+    saveMsg('Save imported.');
+  };
+};
+
+/* ================= menu screens ================= */
+function renderMenu() {
+  const ws = Store.data.words; let met = 0, c = 0, n = 0;
+  for (const k in ws) { if (ws[k].d) met++; c += ws[k].pc + ws[k].mc; n += ws[k].pn + ws[k].mn; }
+  const best = Store.data.scores[0];
+  $('#boardBtn').hidden = !Online.on;
+  $('#sync').textContent = Online.on ? 'Progress saves in this browser. Finished runs post to the global leaderboard.' : 'Progress saves in this browser.';
+  $('#lifetime').textContent = met ? `Met ${met} of ${WORDS.length} words · lifetime accuracy ${pct(c, n) ?? '–'}%${best ? ` · best run ${best.learned} learned` : ''}` : `${WORDS.length} HSK 1–3 words to collect`;
+}
+function renderScores() {
+  const f = $('#sfilter').value;
+  const sc = Store.data.scores.filter(r => f === 'all' || (r.cls || 'student') === f);
+  $('#scoreTable').innerHTML = sc.length ? `<table><thead><tr><th>#</th><th>Class</th><th>Learned</th><th>Collected</th><th>Accuracy</th><th>Survived</th><th>Level</th><th>Defeated</th><th>Characters</th><th>Date</th></tr></thead><tbody>${sc.map((r, i) => `<tr>
+    <td>${i + 1}</td><td>${(c => `<span class="hz" style="font-size:1rem">${c.zh}</span> ${c.name}`)(CBY[r.cls] || CLASSES[0])}</td><td><b class="mid">${r.learned}</b></td><td>${r.collected}</td><td>${accChip(r.correct, r.total)}</td><td>${fmtTime(r.time)}</td><td>${r.level}</td><td>${r.kills}</td>
+    <td class="wrap"><span class="hz">${esc((r.words || []).join(' '))}</span></td><td>${new Date(r.date).toLocaleDateString()}</td></tr>`).join('')}</tbody></table>`
+    : `<p class="empty-note">${f === 'all' ? 'No runs yet. Your best runs will be ranked here.' : 'No runs with this class yet.'}</p>`;
+}
+function renderWords() {
+  const q = $('#wsearch').value.trim().toLowerCase(), sort = $('#wsort').value, ws = Store.data.words;
+  const st = w => ws[w.h] || { d: 0, pc: 0, pn: 0, mc: 0, mn: 0 };
+  const acc = w => { const s = st(w), n = s.pn + s.mn; return n ? (s.pc + s.mc) / n : null; };
+  const lv = $('#wlevel').value, base = WORDS.filter(w => lv === 'all' || w.lvl === +lv);
+  let list = base.filter(w => !q || w.h.includes(q) || pyLetters(w.py).includes(pyLetters(q) || '\u0000') || w.en.some(m => m.toLowerCase().includes(q)));
+  const tests = w => st(w).pn + st(w).mn;
+  if (sort === 'weak') list.sort((a, b) => (acc(a) ?? 2) - (acc(b) ?? 2));
+  else if (sort === 'strong') list.sort((a, b) => (acc(b) ?? -1) - (acc(a) ?? -1));
+  else if (sort === 'most') list.sort((a, b) => tests(b) - tests(a));
+  else if (sort === 'unseen') list.sort((a, b) => (st(a).d ? 1 : 0) - (st(b).d ? 1 : 0) || a.i - b.i);
+  let met = 0, c = 0, n = 0; for (const w of base) { const s = st(w); if (s.d) met++; c += s.pc + s.mc; n += s.pn + s.mn; }
+  $('#wcount').textContent = `${met}/${base.length} met · ${n ? pct(c, n) + '% overall' : 'no tests yet'}`;
+  $('#wordTable').innerHTML = `<table><thead><tr><th>Character</th><th>HSK</th><th>Pinyin</th><th>Meaning</th><th>Drafted</th><th>Pinyin tests</th><th>Meaning tests</th><th>Overall</th></tr></thead><tbody>${list.map(w => {
+    const s = st(w);
+    return `<tr><td><span class="hz">${w.h}</span></td><td>${w.lvl}</td><td>${pyHTML(w)}</td><td class="wrap">${esc(enShow(w))}</td><td>${s.d || '<span class="muted">–</span>'}</td>
+      <td>${accChip(s.pc, s.pn)}</td><td>${accChip(s.mc, s.mn)}</td><td>${accChip(s.pc + s.mc, s.pn + s.mn)}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+$('#wsearch').addEventListener('input', renderWords);
+$('#wlevel').addEventListener('change', renderWords);
+$('#sfilter').addEventListener('change', renderScores);
+$('#wsort').addEventListener('change', renderWords);
+
+function bindSeg(id, get, set) {
+  const el = $(id);
+  const paint = () => el.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === String(get()))));
+  el.querySelectorAll('button').forEach(b => b.onclick = () => { set(b.dataset.v); saveSettings(); paint(); });
+  paint();
+}
+bindSeg('#optMode', () => Settings.mode, v => Settings.mode = v);
+bindSeg('#optTones', () => Settings.tones ? 1 : 0, v => Settings.tones = v === '1');
+bindSeg('#optTime', () => Settings.qtime, v => Settings.qtime = +v);
+bindSeg('#optSpeak', () => Settings.speak ? 1 : 0, v => Settings.speak = v === '1');
+
+$('#playBtn').onclick = openClasses;
+$('#classBack').onclick = () => { showOnly('menu'); renderMenu(); };
+$('#againBtn').onclick = () => newGame(G && G.cls.id);
+$('#menuBtn').onclick = () => { G = null; showOnly('menu'); renderMenu(); };
+$('#wordsBtn').onclick = () => { openSub('words'); renderWords(); };
+$('#scoresBtn').onclick = () => { openSub('scores'); renderScores(); };
+$('#setBtn').onclick = () => openSub('settings');
+$('#pauseBtn').onclick = () => { if (G && (G.state === 'play' || G.state === 'paused')) togglePause(); };
+$('#resumeBtn').onclick = () => resume();
+$('#quitBtn').onclick = () => gameOver('You ended the run');
+
+/* ================= main loop ================= */
+let last = performance.now();
+function frame(ts) {
+  const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000)); last = ts;
+  if (G) {
+    if (G.state === 'play') update(dt);
+    else if (G.state === 'quiz' && G.quiz && !G.quiz.done) {
+      G.quiz.left -= dt;
+      $('#qbar').style.width = (100 * clamp(G.quiz.left / Settings.qtime, 0, 1)) + '%';
+      if (G.quiz.left <= 0) answerQuiz(null);
+    }
+    if (G.state !== 'over') updHud();
+  }
+  draw(dt);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+Store.init();
+</script>
+</body>
+</html>
