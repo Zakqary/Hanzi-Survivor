@@ -319,7 +319,7 @@ tr.me td{background:color-mix(in srgb,var(--gold) 12%,transparent)}
   <div class="panel">
     <div class="head"><div><p class="eyebrow">This browser</p><h2>My best runs</h2></div><button class="btn ghost back" type="button">Back</button></div>
     <div class="controls"><select id="sfilter" aria-label="Filter by class"><option value="all">All classes</option><option value="student">学生 Student · HSK 1</option><option value="scholar">书生 Scholar · HSK 1–2</option><option value="sage">大师 Sage · HSK 1–3</option></select></div>
-    <p class="muted" style="margin:0">Ranked by words learned: different words you answered correctly at least once in the run. Ties go to the longer survival time.</p>
+    <p class="muted" style="margin:0">Ranked by level reached. Ties go to more words learned (different words you answered correctly at least once in the run), then the longer survival time.</p>
     <div class="tablewrap" id="scoreTable"></div>
   </div>
 </div>
@@ -1067,11 +1067,14 @@ const Settings = (() => {
 })();
 function saveSettings() { try { localStorage.setItem(KEY + '-settings', JSON.stringify(Settings)); } catch (e) { } }
 
+// Runs rank by level reached, then words learned, then survival time.
+const byRun = (a, b) => b.level - a.level || b.learned - a.learned || b.time - a.time;
 const Store = {
   data: { scores: [], words: {} }, doc: null, writing: false, dirty: false,
   weight(d) { let n = (d.scores || []).length; for (const k in d.words || {}) { const s = d.words[k]; n += (s.pn || 0) + (s.mn || 0) + (s.d || 0); } return n; },
   async init() {
     try { const raw = localStorage.getItem(KEY); if (raw) this.data = Object.assign({ scores: [], words: {} }, JSON.parse(raw)); } catch (e) { }
+    this.data.scores.sort(byRun);
     renderMenu();
     Online.flush();
   },
@@ -1134,7 +1137,7 @@ const Online = {
     for (const row of this.pending()) { try { await this.req('scores', row, true); } catch (e) { if (!e.http) keep.push(row); } }
     this.setPending(keep);
   },
-  board(cls, since) { return this.req('rpc/leaderboard', { p_cls: cls, p_since: since, p_limit: 50 }); },
+  board(cls, since) { return this.req('rpc/leaderboard', { p_cls: cls, p_since: since, p_limit: 100 }); },
 };
 
 function wstat(h) { return Store.data.words[h] || (Store.data.words[h] = { d: 0, pc: 0, pn: 0, mc: 0, mn: 0 }); }
@@ -2109,7 +2112,7 @@ function gameOver(reason) {
     words: [...new Set(G.coll.map(c => c.w.h))],
   };
   const sc = Store.data.scores; sc.push(rec);
-  sc.sort((a, b) => b.learned - a.learned || b.time - a.time);
+  sc.sort(byRun);
   Store.data.scores = sc.slice(0, 25);
   const rank = Store.data.scores.indexOf(rec);
   Store.save(true);
@@ -2170,7 +2173,7 @@ function openBoard(cls) {
 }
 async function loadBoard() {
   paintSeg('#bPeriod', boardPeriod); paintSeg('#bClass', boardCls);
-  $('#bNote').textContent = `Each player's best ${CBY[boardCls].name} run, ranked by words learned, then survival time. ` +
+  $('#bNote').textContent = `Top 100 ${CBY[boardCls].name} runs, ranked by level reached, then words learned, then survival time. ` +
     (boardPeriod === 'day' ? 'Resets at 00:00 UTC.' : boardPeriod === 'week' ? 'Resets Monday 00:00 UTC.' : 'Since launch.');
   const tbl = $('#boardTable'), my = ++boardReq;
   tbl.innerHTML = '<p class="empty-note">Loading…</p>';
@@ -2178,9 +2181,9 @@ async function loadBoard() {
     const rows = await Online.board(boardCls, periodStart(boardPeriod));
     if (my !== boardReq) return;
     const me = Online.id;
-    tbl.innerHTML = rows.length ? `<table><thead><tr><th>#</th><th>Player</th><th>Learned</th><th>Accuracy</th><th>Survived</th><th>Level</th><th>Date</th></tr></thead><tbody>${rows.map((r, i) => `<tr class="${r.player_id === me ? 'me' : ''}">
-      <td>${i + 1}</td><td>${esc(r.nickname)}${r.player_id === me ? ' <span class="muted">(you)</span>' : ''}</td><td><b class="mid">${r.learned}</b></td>
-      <td>${accChip(r.correct, r.total)}</td><td>${fmtTime(r.time_s)}</td><td>${r.level}</td><td>${new Date(r.created_at).toLocaleDateString()}</td></tr>`).join('')}</tbody></table>`
+    tbl.innerHTML = rows.length ? `<table><thead><tr><th>#</th><th>Player</th><th>Level</th><th>Learned</th><th>Accuracy</th><th>Survived</th><th>Date</th></tr></thead><tbody>${rows.map((r, i) => `<tr class="${r.player_id === me ? 'me' : ''}">
+      <td>${i + 1}</td><td>${esc(r.nickname)}${r.player_id === me ? ' <span class="muted">(you)</span>' : ''}</td><td><b class="mid">${r.level}</b></td><td>${r.learned}</td>
+      <td>${accChip(r.correct, r.total)}</td><td>${fmtTime(r.time_s)}</td><td>${new Date(r.created_at).toLocaleDateString()}</td></tr>`).join('')}</tbody></table>`
       : `<p class="empty-note">No ${CBY[boardCls].name} runs posted ${boardPeriod === 'day' ? 'today' : boardPeriod === 'week' ? 'this week' : 'yet'}. Finish a run to take first place.</p>`;
   } catch (e) {
     if (my !== boardReq) return;
@@ -2218,7 +2221,7 @@ $('#importFile').onchange = async e => {
   saveMsg(`This file has ${j.data.scores.length} runs and ${words} words met. Importing replaces this browser's save. <button class="btn" type="button" id="importGo">Replace my save</button> <button class="btn ghost" type="button" id="importNo">Cancel</button>`);
   $('#importNo').onclick = () => { $('#saveMsg').hidden = true; };
   $('#importGo').onclick = () => {
-    Store.data = { scores: j.data.scores.slice(0, 25), words: j.data.words };
+    Store.data = { scores: j.data.scores.slice().sort(byRun).slice(0, 25), words: j.data.words };
     Store.save(false);
     if (j.player_id) lsSet(KEY + '-player', String(j.player_id));
     if (j.name) Online.name = j.name;
@@ -2234,13 +2237,13 @@ function renderMenu() {
   const best = Store.data.scores[0];
   $('#boardBtn').hidden = !Online.on;
   $('#sync').textContent = Online.on ? 'Progress saves in this browser. Finished runs post to the global leaderboard.' : 'Progress saves in this browser.';
-  $('#lifetime').textContent = met ? `Met ${met} of ${WORDS.length} words · lifetime accuracy ${pct(c, n) ?? '–'}%${best ? ` · best run ${best.learned} learned` : ''}` : `${WORDS.length} HSK 1–3 words to collect`;
+  $('#lifetime').textContent = met ? `Met ${met} of ${WORDS.length} words · lifetime accuracy ${pct(c, n) ?? '–'}%${best ? ` · best run level ${best.level}` : ''}` : `${WORDS.length} HSK 1–3 words to collect`;
 }
 function renderScores() {
   const f = $('#sfilter').value;
   const sc = Store.data.scores.filter(r => f === 'all' || (r.cls || 'student') === f);
-  $('#scoreTable').innerHTML = sc.length ? `<table><thead><tr><th>#</th><th>Class</th><th>Learned</th><th>Collected</th><th>Accuracy</th><th>Survived</th><th>Level</th><th>Defeated</th><th>Characters</th><th>Date</th></tr></thead><tbody>${sc.map((r, i) => `<tr>
-    <td>${i + 1}</td><td>${(c => `<span class="hz" style="font-size:1rem">${c.zh}</span> ${c.name}`)(CBY[r.cls] || CLASSES[0])}</td><td><b class="mid">${r.learned}</b></td><td>${r.collected}</td><td>${accChip(r.correct, r.total)}</td><td>${fmtTime(r.time)}</td><td>${r.level}</td><td>${r.kills}</td>
+  $('#scoreTable').innerHTML = sc.length ? `<table><thead><tr><th>#</th><th>Class</th><th>Level</th><th>Learned</th><th>Collected</th><th>Accuracy</th><th>Survived</th><th>Defeated</th><th>Characters</th><th>Date</th></tr></thead><tbody>${sc.map((r, i) => `<tr>
+    <td>${i + 1}</td><td>${(c => `<span class="hz" style="font-size:1rem">${c.zh}</span> ${c.name}`)(CBY[r.cls] || CLASSES[0])}</td><td><b class="mid">${r.level}</b></td><td>${r.learned}</td><td>${r.collected}</td><td>${accChip(r.correct, r.total)}</td><td>${fmtTime(r.time)}</td><td>${r.kills}</td>
     <td class="wrap"><span class="hz">${esc((r.words || []).join(' '))}</span></td><td>${new Date(r.date).toLocaleDateString()}</td></tr>`).join('')}</tbody></table>`
     : `<p class="empty-note">${f === 'all' ? 'No runs yet. Your best runs will be ranked here.' : 'No runs with this class yet.'}</p>`;
 }
